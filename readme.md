@@ -66,7 +66,7 @@ dataset, so a **theoretical PSF** was generated with the
 [PSF Generator](https://bigwww.epfl.ch/algorithms/psfgenerator/) Fiji plugin
 using the **Born & Wolf 3D optical model**.
 
-![Theoretical PSF generation parameters](PSF-Theoretical-Generated.png)
+![Theoretical PSF generation parameters](assets/PSF-Theoretical-Generated.png)
 
 ### Parameters used
 
@@ -108,6 +108,64 @@ The deconvolution itself is the **not-yet-released** part of the pipeline:
 
 ---
 
+## Running it yourself — `Deconvolve.groovy`
+
+[`Deconvolve.groovy`](Deconvolve.groovy) wraps the whole pipeline as a single
+Fiji script: it opens a multi-channel image and a matching single-channel PSF
+via Bio-Formats, runs **tiled, lazy Richardson–Lucy GPU deconvolution** (CLIJ2)
+block by block, and exports the result as an **OME-TIFF** (channel order
+preserved). The computation is lazy — writing the output file is what actually
+triggers the block-by-block GPU work.
+
+### Requirements
+
+An up-to-date **Fiji** with the following update sites enabled
+(`Help ▸ Update… ▸ Manage update sites`):
+
+- **UNIGE-Biochem**
+- **clij**
+- **clij2**
+- **clijx-deconvolution**
+
+A CUDA-capable **GPU** is used through CLIJ2.
+
+### How to run (single image)
+
+1. Open the script in Fiji: drag `Deconvolve.groovy` onto the main window, or
+   `File ▸ Open…` then `Run` in the Script Editor.
+2. Fill in the dialog and run:
+   - **Image to deconvolve** — the multi-channel raw image (e.g. CZI).
+   - **PSF image** — a single-channel PSF (one PSF is used for all channels).
+   - **Output folder** — result is written as `<imageName>.ome.tiff`.
+3. The deconvolved OME-TIFF is written to the output folder.
+
+### How to batch process
+
+In the Fiji Script Editor, use the **`Batch`** button (next to `Run`). Because
+the inputs are declared as script parameters, Fiji lets you point the `File`
+inputs at a folder and runs the script over every file — reusing the same PSF
+and settings for all of them.
+
+### Key parameters
+
+| Parameter                 | Default   | Notes                                                    |
+|---------------------------|-----------|----------------------------------------------------------|
+| Number of iterations      | 120       | Richardson–Lucy steps.                                   |
+| Regularization factor     | 0.000     | 0 = none; increase to tame noise/ringing.                |
+| Non-circulant             | true      | Reduces edge artefacts.                                  |
+| Block size X / Y / Z      | 256/256/64 | Tiling — lower it if you run out of GPU memory.          |
+| Block overlap             | 16 px     | Overlap between tiles to avoid seams.                    |
+| GPU streams / threads     | 10        | Parallel blocks on the GPU.                              |
+| Output pixel type         | keep original | Or force `Float`.                                    |
+| OME-TIFF compression      | LZW       | Export compression.                                      |
+| Show sources in BigDataViewer | true  | Displays raw + deconvolved for a quick visual check.     |
+| Overwrite                 | false     | Refuses to clobber an existing output unless ticked.     |
+
+> The script defaults (**120 iterations**, **no regularization**) match the demo
+> dataset shown above — tune them for your own data.
+
+---
+
 ## Results
 
 Qualitative comparison of the raw vs. deconvolved demo dataset.
@@ -116,7 +174,7 @@ Qualitative comparison of the raw vs. deconvolved demo dataset.
 
 | Raw | Deconvolved |
 |-----|-------------|
-| ![Z projection — raw](ZProjection-Raw.png) | ![Z projection — deconvolved](ZProjection-Deconvolved.png) |
+| ![Z projection — raw](assets/ZProjection-Raw.png) | ![Z projection — deconvolved](assets/ZProjection-Deconvolved.png) |
 
 ### Axial cross-section (Z view)
 
@@ -125,7 +183,7 @@ expected to help most.
 
 | Raw | Deconvolved |
 |-----|-------------|
-| ![Cross-section — raw](CrossSection-Raw.png) | ![Cross-section — deconvolved](CrossSection-Deconvolved.png) |
+| ![Cross-section — raw](assets/CrossSection-Raw.png) | ![Cross-section — deconvolved](assets/CrossSection-Deconvolved.png) |
 
 ---
 
