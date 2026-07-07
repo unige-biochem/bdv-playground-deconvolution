@@ -99,6 +99,27 @@ An up-to-date **Fiji** with the following update sites enabled
 
 An OpenCL-capable **GPU** is used through CLIJ2.
 
+### Configuring the GPU pool (optional)
+
+By default the deconvolution runs on a single GPU (device `0`). If you have
+multiple GPUs — or want to run several parallel contexts on one GPU — configure
+the OpenCL device pool:
+
+`Edit ▸ Options ▸ CLIJ Pool Options`
+
+The dialog lists the available device indices and takes a **`Pool
+Configuration`** string of the form `device_idx:n_workers, device_idx:n_workers`
+(default `0:1`). For example, `0:2, 1:4` runs **2** contexts on GPU 0 and **4**
+on GPU 1 — **6 GPU workers** in total. The setting is persisted in the ImageJ
+preferences, so it applies to all subsequent runs.
+
+> **Pool workers vs. `Number of GPU streams / threads`.** The pool config above
+> sets the number of **GPU-side** workers. The script's **`Number of GPU streams
+> / threads`** parameter is the number of **CPU-side** workers that feed the pool
+> (loading, converting, handing blocks over to the GPU, then retrieving and
+> writing the result). It's generally good to keep a few **more** CPU workers
+> than the total number of GPU pool workers, so the GPUs are never left waiting.
+
 ### How to run (single image)
 
 1. Open the script in Fiji: drag `Deconvolve.groovy` onto the main window, or

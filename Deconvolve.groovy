@@ -39,6 +39,12 @@
  * the output OME-TIFF is what actually triggers the computation, block by block,
  * on the GPU.
  *
+ * GPU pool: the GPU(s) and the number of GPU-side workers are configured
+ * separately, in Edit > Options > CLIJ Pool Options (e.g. "0:2, 1:4"). The
+ * "Number of GPU streams / threads" parameter below is instead the number of
+ * CPU-side workers that feed that pool (load/convert -> hand to GPU -> retrieve
+ * -> write); keep it a bit higher than the total number of GPU pool workers.
+ *
  * Author: BIOP - EPFL. Free to reuse.
  */
 
