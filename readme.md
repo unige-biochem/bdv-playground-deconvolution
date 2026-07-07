@@ -69,9 +69,23 @@ are listed on each dataset page.
 [`Deconvolve.groovy`](Deconvolve.groovy) wraps the whole pipeline as a single
 Fiji script: it opens a multi-channel image and a matching single-channel PSF
 via Bio-Formats, runs **tiled, lazy Richardson–Lucy GPU deconvolution** (CLIJ2)
-block by block, and exports the result as an **OME-TIFF** (channel order
-preserved). The computation is lazy — writing the output file is what actually
-triggers the block-by-block GPU work.
+block by block, and can **view the result in BigDataViewer**, **export it as an
+OME-TIFF** (channel order preserved), or both. The computation is lazy —
+browsing the sources in BigDataViewer or writing the output file is what
+actually triggers the block-by-block GPU work.
+
+### View, save, or both
+
+Two independent options control what happens after deconvolution:
+
+- **Show sources in BigDataViewer** — opens the raw and deconvolved sources for a
+  quick visual check (no file written).
+- **Save deconvolved output (OME-TIFF)** — writes `<imageName>.ome.tiff` to the
+  output folder.
+
+Enable either or both. With saving off, the output folder is optional and no
+file is written; with only saving on, the sources are freed after export (handy
+for batch runs).
 
 ### Requirements
 
@@ -92,8 +106,10 @@ An OpenCL-capable **GPU** is used through CLIJ2.
 2. Fill in the dialog and run:
    - **Image to deconvolve** — the multi-channel raw image (e.g. CZI).
    - **PSF image** — a single-channel PSF (one PSF is used for all channels).
-   - **Output folder** — result is written as `<imageName>.ome.tiff`.
-3. The deconvolved OME-TIFF is written to the output folder.
+   - **Show sources in BigDataViewer / Save deconvolved output** — pick view,
+     save, or both (at least one).
+   - **Output folder** — where `<imageName>.ome.tiff` is written when saving.
+3. The result is shown in BigDataViewer and/or written to the output folder.
 
 ### How to batch process
 
@@ -115,6 +131,7 @@ and settings for all of them.
 | Output pixel type         | keep original | Or force `Float`.                                    |
 | OME-TIFF compression      | LZW       | Export compression.                                      |
 | Show sources in BigDataViewer | true  | Displays raw + deconvolved for a quick visual check.     |
+| Save deconvolved output   | true      | Write the OME-TIFF. Untick to only view.                 |
 | Overwrite                 | false     | Refuses to clobber an existing output unless ticked.     |
 
 > The script defaults (**120 iterations**, **no regularization**) match the

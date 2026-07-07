@@ -1,6 +1,6 @@
 #@ File    (label = "Image to deconvolve (multi-channel)", style = "open")                                             imageFile
 #@ File    (label = "PSF image (single channel)",           style = "open")                                            psfFile
-#@ File    (label = "Output folder",                        style = "directory")                                       outputFolder
+#@ File    (label = "Output folder (only used when saving)", style = "directory", required = false)                     outputFolder
 #@ String  (label = "Coordinate unit", choices = {"MICROMETER","MILLIMETER","NANOMETER","PIXEL"}, value = "MICROMETER") unit
 #@ String  (label = "Output pixel type", choices = {"Keep Pixel Type Of Original Image","Float"}, value = "Keep Pixel Type Of Original Image") outputPixelType
 #@ Integer (label = "Block size X (pixels)",                value = 256)                                                blockSizeX
@@ -12,6 +12,7 @@
 #@ Double  (label = "Regularization factor",               value = 0.000)                                              regularizationFactor
 #@ Integer (label = "Number of GPU streams / threads",     value = 10)                                                  nThreads
 #@ Boolean (label = "Show sources in BigDataViewer",       value = true)                                               showInBdv
+#@ Boolean (label = "Save deconvolved output (OME-TIFF)",  value = true)                                                saveOutput
 #@ String  (label = "OME-TIFF compression", choices = {"LZW","Uncompressed","JPEG-2000","JPEG-2000 Lossy","JPEG"}, value = "LZW") compression
 #@ Integer (label = "OME-TIFF resolution levels",          value = 1)                                                  nResolutionLevels
 #@ Boolean (label = "Overwrite output if it already exists", value = false)                                            overwrite
@@ -20,18 +21,23 @@
 #@ SourceService sourceService
 
 /*
- * Deconvolve a multi-channel image with a matching single-channel PSF and save
- * the result as an OME-TIFF.
+ * Deconvolve a multi-channel image with a matching single-channel PSF, then
+ * view the result in BigDataViewer, save it as an OME-TIFF, or both.
  *
  * Pipeline (all through BigDataViewer-Playground commands, lazily / block-by-block):
  *   1. Open the image and the PSF through Bio-Formats as BDV sources.
  *   2. (optionally) show both in BigDataViewer.
  *   3. Run tiled, lazy Richardson-Lucy GPU deconvolution (CLIJ2).
- *   4. Export the deconvolved sources to <outputFolder>/<imageName>.ome.tiff,
- *      keeping the original channel order.
+ *   4. (optionally) export the deconvolved sources to
+ *      <outputFolder>/<imageName>.ome.tiff, keeping the original channel order.
  *
- * The deconvolution is lazy: the output OME-TIFF file is what actually triggers
- * the computation, block by block, on the GPU.
+ * The "Show sources in BigDataViewer" and "Save deconvolved output" options are
+ * independent, so a single run can view the result, save it, or do both. At
+ * least one of them must be enabled.
+ *
+ * The deconvolution is lazy: browsing the sources in BigDataViewer or writing
+ * the output OME-TIFF is what actually triggers the computation, block by block,
+ * on the GPU.
  *
  * Author: BIOP - EPFL. Free to reuse.
  */
@@ -48,15 +54,25 @@ import sc.fiji.bdvpg.service.SourceServices
 
 def imageName  = FilenameUtils.removeExtension(imageFile.getName())
 def psfName    = FilenameUtils.removeExtension(psfFile.getName())
-def outputFile = new File(outputFolder, imageName + ".ome.tiff")
 
-if (outputFile.exists()) {
-    if (overwrite) {
-        if (!outputFile.delete()) {
-            throw new IllegalStateException("Could not delete pre-existing output file: " + outputFile)
+if (!showInBdv && !saveOutput) {
+    throw new IllegalStateException("Nothing to do: enable 'Show sources in BigDataViewer', 'Save deconvolved output', or both.")
+}
+
+def outputFile = null
+if (saveOutput) {
+    if (outputFolder == null) {
+        throw new IllegalStateException("No output folder chosen: pick one, or untick 'Save deconvolved output' to only view the result.")
+    }
+    outputFile = new File(outputFolder, imageName + ".ome.tiff")
+    if (outputFile.exists()) {
+        if (overwrite) {
+            if (!outputFile.delete()) {
+                throw new IllegalStateException("Could not delete pre-existing output file: " + outputFile)
+            }
+        } else {
+            throw new IllegalStateException("Output file already exists (tick 'Overwrite' to replace it): " + outputFile)
         }
-    } else {
-        throw new IllegalStateException("Output file already exists (tick 'Overwrite' to replace it): " + outputFile)
     }
 }
 
@@ -124,30 +140,40 @@ if (showInBdv) {
     SourceServices.getBdvDisplayService().show(bdvDec, deconvolved)
 }
 
-// ---- 5. Export the deconvolved sources to OME-TIFF -------------------------
+// ---- 5. Optionally export the deconvolved sources to OME-TIFF --------------
 // Channels are exported in the same order as the input (deconvolved[i] <-> imageSources[i]).
 // Leaving range_* blank exports every channel / slice / timepoint.
 
-cs.run(KheopsExportSourcesCommand, true,
-        "sacs",              deconvolved,
-        "range_channels",       "",
-        "range_slices",         "",
-        "range_frames",         "",
-        "file",                 outputFile,
-        "unit",                 exportUnit,
-        "override_voxel_size",  false,
-        "n_resolution_levels",  nResolutionLevels,
-        "downscaling",          2,
-        "tile_size_x",          256,
-        "tile_size_y",          256,
-        "n_threads",            nThreads,
-        "compression",          compression,
-        "compress_temp_files",  false,
-        "vox_size_xy_um",		0.0,
-        "vox_size_z_um",		0.0
-).get()
+if (saveOutput) {
+    cs.run(KheopsExportSourcesCommand, true,
+            "sacs",              deconvolved,
+            "range_channels",       "",
+            "range_slices",         "",
+            "range_frames",         "",
+            "file",                 outputFile,
+            "unit",                 exportUnit,
+            "override_voxel_size",  false,
+            "n_resolution_levels",  nResolutionLevels,
+            "downscaling",          2,
+            "tile_size_x",          256,
+            "tile_size_y",          256,
+            "n_threads",            nThreads,
+            "compression",          compression,
+            "compress_temp_files",  false,
+            "vox_size_xy_um",		0.0,
+            "vox_size_z_um",		0.0
+    ).get()
+    println "Saved deconvolved OME-TIFF: " + outputFile
+} else {
+    println "Save skipped — deconvolved sources are shown in BigDataViewer only (computed lazily as you browse)."
+}
 
-// Sources cleanup
-sourceService.remove(deconvolved as SourceAndConverter[])
-sourceService.remove(imageSources as SourceAndConverter[])
-sourceService.remove(psfSources as SourceAndConverter[])
+// ---- 6. Sources cleanup ----------------------------------------------------
+// Only free the sources when nothing is being displayed; when shown in BDV they
+// are kept so the user can keep browsing the (raw and) deconvolved result.
+
+if (!showInBdv) {
+    sourceService.remove(deconvolved as SourceAndConverter[])
+    sourceService.remove(imageSources as SourceAndConverter[])
+    sourceService.remove(psfSources as SourceAndConverter[])
+}
