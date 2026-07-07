@@ -13,8 +13,8 @@ GitLab: https://gitlab.unige.ch/unige-biochem/dudin-lab/deconvolution-workflow
 
 ## Goal
 
-We were given raw **CZI** files (4-channel widefield fluorescence). The question
-is simple:
+We were given raw **CZI** files (multi-channel widefield fluorescence). The
+question is simple:
 
 > Does deconvolving the raw data measurably help the downstream workflow?
 
@@ -24,75 +24,52 @@ The deconvolution workflow will soon be distributed via the
 
 ---
 
-## Demo dataset
+## Datasets
 
-A single raw CZI acquisition is used as the test case. Acquisition metadata
-(extracted from the CZI):
+The workflow is being tested on several datasets. Each has its own optics, voxel
+size and PSF — the per-dataset pages below record all of that:
 
-### Optics & detector
+| Dataset | Sample | Z step | Details |
+|---------|--------|-------:|---------|
+| **Paula** | 4-channel widefield fluorescence | 500 nm | [datasets/paula.md](datasets/paula.md) |
+| **Baukje** | *Dictyostelium* + ConA (widefield) | 330 nm | [datasets/baukje.md](datasets/baukje.md) |
 
-| Property           | Value                                              |
-|--------------------|----------------------------------------------------|
-| Objective          | LD C-Apochromat 40x/1.1 W Korr UV VIS IR           |
-| Immersion          | Water                                              |
-| NA                 | 1.1                                                |
-| Nominal mag.       | 40×                                                |
-| Working distance   | 600 µm                                             |
-| Detector           | Hamamatsu camera (1× camera adapter)               |
-| Acquisition mode   | Widefield / Epifluorescence                        |
+The **optics and deconvolution settings are shared** across datasets; the main
+difference is the **axial (Z) sampling**, which changes the Z step used to
+generate the theoretical PSF. See each page for the exact acquisition metadata,
+PSF parameters and before/after results.
 
-### Voxel size
+---
 
-| Axis      | Size    |
-|-----------|---------|
-| XY pixel  | 162 nm  |
-| Z step    | 500 nm  |
+## Why deconvolution — axial cross-section
 
-### Channels
+The axial (Z) view is where widefield blur is worst and where deconvolution is
+expected to help most. Below is a representative axial cross-section, raw vs.
+deconvolved:
 
-| Channel  | Fluor           | Excitation | Emission |
-|----------|-----------------|-----------:|---------:|
-| 0:0      | Alexa Fluor 647 | 650 nm     | 671 nm   |
-| 0:1      | Alexa Fluor 568 | 579 nm     | 603 nm   |
-| 0:2      | Alexa Fluor 488 | 499 nm     | 520 nm   |
-| 0:3      | DAPI            | 351 nm     | 464 nm   |
+| Raw | Deconvolved |
+|-----|-------------|
+| ![Cross-section — raw](assets/CrossSection-Raw.png) | ![Cross-section — deconvolved](assets/CrossSection-Deconvolved.png) |
+
+Per-dataset lateral (Z projection) comparisons are on each dataset page.
 
 ---
 
 ## Point Spread Function (PSF)
 
-No **empirical PSF** (e.g. from sub-resolution beads) was available for this
-dataset, so a **theoretical PSF** was generated with the
+No **empirical PSF** (e.g. from sub-resolution beads) was available, so a
+**theoretical PSF** is generated with the
 [PSF Generator](https://bigwww.epfl.ch/algorithms/psfgenerator/) Fiji plugin
 using the **Born & Wolf 3D optical model**.
 
-![Theoretical PSF generation parameters](assets/PSF-Theoretical-Generated.png)
+One **single-channel PSF** is generated **per dataset** and reused for all
+channels. Because the datasets share the same optics, the PSF parameters are
+identical **except for the Z step**, which is matched to each acquisition's
+axial sampling. The exact parameters and the resulting theoretical resolution
+are listed on each dataset page.
 
-### Parameters used
-
-| Parameter                     | Value                     |
-|-------------------------------|---------------------------|
-| Optical model                 | Born & Wolf 3D            |
-| Refractive index (immersion)  | 1.33 (water)              |
-| Accuracy                      | Good                      |
-| Wavelength                    | 610 nm                    |
-| Numerical aperture (NA)       | 1.1                       |
-| Pixel size XY                 | 162 nm                    |
-| Z step                        | 500 nm                    |
-| Output size (X × Y × Z)       | 256 × 256 × 65            |
-| Output type / display         | 32-bit, Linear, Fire LUT  |
-
-Resulting theoretical resolution (reported by the plugin):
-
-| Metric   | Value     |
-|----------|-----------|
-| FWHM XY  | 338.3 nm  |
-| FWHM Z   | 1008.3 nm |
-
-> **Note:** the immersion refractive index (1.33) matches the water-immersion
-> objective, and the NA / voxel size match the acquisition. A single
-> representative emission wavelength (**610 nm**) was used to generate **one**
-> PSF applied to the data — see [open questions](#open-questions).
+> A single representative emission wavelength is used to generate **one** PSF
+> applied to every channel — see [open questions](#open-questions).
 
 ---
 
@@ -101,10 +78,11 @@ Resulting theoretical resolution (reported by the plugin):
 The deconvolution itself is the **not-yet-released** part of the pipeline:
 
 - **Tool:** [BigDataViewer Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html) **Tiled Multi-GPU deconvolution** in ImageJ / Fiji
+- **Algorithm:** Richardson–Lucy (CLIJ2, GPU)
 - **Regularization:** none
 - **Iterations:** 120 deconvolution steps
-- **PSF:** the theoretical PSF above, stored beforehand
-- **Output:** result resaved into the `deconvolution` folder of the dataset
+- **PSF:** the dataset's theoretical PSF, stored beforehand
+- **Output:** result resaved into the `deconvolved` folder of the dataset
 
 ---
 
@@ -161,36 +139,15 @@ and settings for all of them.
 | Show sources in BigDataViewer | true  | Displays raw + deconvolved for a quick visual check.     |
 | Overwrite                 | false     | Refuses to clobber an existing output unless ticked.     |
 
-> The script defaults (**120 iterations**, **no regularization**) match the demo
-> dataset shown above — tune them for your own data.
-
----
-
-## Results
-
-Qualitative comparison of the raw vs. deconvolved demo dataset.
-
-### Z projection (lateral view)
-
-| Raw | Deconvolved |
-|-----|-------------|
-| ![Z projection — raw](assets/ZProjection-Raw.png) | ![Z projection — deconvolved](assets/ZProjection-Deconvolved.png) |
-
-### Axial cross-section (Z view)
-
-The axial view is where widefield blur is worst and where deconvolution is
-expected to help most.
-
-| Raw | Deconvolved |
-|-----|-------------|
-| ![Cross-section — raw](assets/CrossSection-Raw.png) | ![Cross-section — deconvolved](assets/CrossSection-Deconvolved.png) |
+> The script defaults (**120 iterations**, **no regularization**) match the
+> datasets described here — tune them for your own data.
 
 ---
 
 ## What has been tested
 
-- [x] Extracted acquisition metadata from a raw CZI
-- [x] Generated a theoretical PSF (Born & Wolf) matching the acquisition optics
+- [x] Extracted acquisition metadata from the raw CZIs
+- [x] Generated a theoretical PSF (Born & Wolf) matching each acquisition's optics
 - [x] Ran GPU deconvolution (BDV Playground, 120 iterations, no regularization)
 - [x] Produced qualitative before/after comparisons (lateral + axial)
 - [ ] Quantitative evaluation of the improvement
@@ -209,6 +166,8 @@ expected to help most.
 
 - **Quantitative metric.** What is the right metric to declare the workflow
   "improved" (resolution, SNR, downstream segmentation accuracy)?
+- **One PSF for all channels.** A single emission wavelength is used to generate
+  the PSF applied to every channel — is a per-channel PSF worth it?
 
 ---
 
@@ -220,4 +179,5 @@ Raw and deconvolved data are stored outside the repo:
 F:\user-projects\data\dudin-lab\deconvolution-workflow
 ```
 
-(Also linked via `Shared_Folder.lnk`.)
+(Also linked via `Shared_Folder.lnk`.) Each dataset lives in its own subfolder
+(`paula\`, `baukje\`).
