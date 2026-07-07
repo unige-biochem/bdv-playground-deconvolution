@@ -1,43 +1,8 @@
 # Deconvolution Workflow
 
-Created by: **Nicolas Chiaruttini** — Dudin Lab
+Created by: **Nicolas Chiaruttini**
 
 GitLab: https://gitlab.unige.ch/unige-biochem/dudin-lab/deconvolution-workflow
-
-> **Status:** early draft / proof of concept. The goal of this repo is to
-> assess whether **deconvolution** improves downstream image-analysis
-> workflows. This repo intentionally covers the **deconvolution step only** —
-> the downstream analysis lives elsewhere.
-
----
-
-## Goal
-
-We were given raw **CZI** files (multi-channel widefield fluorescence). The
-question is simple:
-
-> Does deconvolving the raw data measurably help the downstream workflow?
-
-If it does, the next step is to **streamline** the process (see [Roadmap](#roadmap)).
-The deconvolution workflow will soon be distributed via the
-**UNIGE-Biochem update site** in [ImageJ / Fiji](https://fiji.sc/).
-
----
-
-## Datasets
-
-The workflow is being tested on several datasets. Each has its own optics, voxel
-size and PSF — the per-dataset pages below record all of that:
-
-| Dataset | Sample | Z step | Details |
-|---------|--------|-------:|---------|
-| **Paula** | 4-channel widefield fluorescence | 500 nm | [datasets/paula.md](datasets/paula.md) |
-| **Baukje** | *Dictyostelium* + ConA (widefield) | 330 nm | [datasets/baukje.md](datasets/baukje.md) |
-
-The **optics and deconvolution settings are shared** across datasets; the main
-difference is the **axial (Z) sampling**, which changes the Z step used to
-generate the theoretical PSF. See each page for the exact acquisition metadata,
-PSF parameters and before/after results.
 
 ---
 
@@ -52,6 +17,21 @@ deconvolved:
 | ![Cross-section — raw](assets/CrossSection-Raw.png) | ![Cross-section — deconvolved](assets/CrossSection-Deconvolved.png) |
 
 Per-dataset lateral (Z projection) comparisons are on each dataset page.
+
+---
+
+## Datasets
+
+The workflow is being tested on several datasets. Each has its own PSF — the per-dataset pages below record all of that:
+
+| Dataset | Sample | Z step | Details |
+|---------|--------|-------:|---------|
+| **Paula** | 4-channel widefield fluorescence | 500 nm | [datasets/paula.md](datasets/paula.md) |
+| **Baukje** | *Dictyostelium* + ConA (widefield) | 330 nm | [datasets/baukje.md](datasets/baukje.md) |
+
+See each page for the exact acquisition metadata,
+PSF parameters and before/after results.
+
 
 ---
 
@@ -75,10 +55,8 @@ are listed on each dataset page.
 
 ## Deconvolution
 
-The deconvolution itself is the **not-yet-released** part of the pipeline:
-
 - **Tool:** [BigDataViewer Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html) **Tiled Multi-GPU deconvolution** in ImageJ / Fiji
-- **Algorithm:** Richardson–Lucy (CLIJ2, GPU)
+- **Algorithm:** Richardson–Lucy with non-circulant edge handling and total variation regularization
 - **Regularization:** none
 - **Iterations:** 120 deconvolution steps
 - **PSF:** the dataset's theoretical PSF, stored beforehand
@@ -105,7 +83,7 @@ An up-to-date **Fiji** with the following update sites enabled
 - **clij2**
 - **clijx-deconvolution**
 
-A CUDA-capable **GPU** is used through CLIJ2.
+An OpenCL-capable **GPU** is used through CLIJ2.
 
 ### How to run (single image)
 
@@ -142,30 +120,11 @@ and settings for all of them.
 > The script defaults (**120 iterations**, **no regularization**) match the
 > datasets described here — tune them for your own data.
 
----
-
-## What has been tested
-
-- [x] Extracted acquisition metadata from the raw CZIs
-- [x] Generated a theoretical PSF (Born & Wolf) matching each acquisition's optics
-- [x] Ran GPU deconvolution (BDV Playground, 120 iterations, no regularization)
-- [x] Produced qualitative before/after comparisons (lateral + axial)
-- [ ] Quantitative evaluation of the improvement
-- [ ] Confirmation that deconvolution helps the **downstream** workflow
 
 ---
-
-## Roadmap
-
-1. **Evaluate downstream impact** — feed deconvolved data into the downstream
-   workflow and check whether results improve over raw data.
-2. **If it helps → streamline** the process into (one-click-ish
-   pipeline ? make cluster compatible ? controlled via Python ?) pre-crop the data (plenty of useless noise here)
 
 ### Open questions
 
-- **Quantitative metric.** What is the right metric to declare the workflow
-  "improved" (resolution, SNR, downstream segmentation accuracy)?
 - **One PSF for all channels.** A single emission wavelength is used to generate
   the PSF applied to every channel — is a per-channel PSF worth it?
 
