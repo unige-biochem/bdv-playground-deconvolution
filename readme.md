@@ -1,12 +1,15 @@
 # Tiled Multi-GPU Deconvolution
 
-Richardson–Lucy deconvolution for large multi-channel 3D microscopy images,
-in Python.
+Richardson–Lucy deconvolution for large **5D** microscopy images (XYZ + channels
++ timepoints), in Python.
 
 It handles images far bigger than GPU memory by working **tiled** and **lazily**:
-the volume is split into overlapping blocks, each block is deconvolved on the
+each volume is split into overlapping blocks, each block is deconvolved on the
 GPU, and nothing is computed until you actually browse or export the result.
 Multiple GPUs (or several contexts on one GPU) can be used in parallel.
+
+All channels and timepoints are processed and written out by default, in the
+original order, using a single PSF.
 
 Under the hood it drives [BigDataViewer-Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html)
 and CLIJ2 through [PyImageJ](https://github.com/imagej/pyimagej) — the numerics

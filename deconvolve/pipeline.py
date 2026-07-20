@@ -1,6 +1,7 @@
 """Core deconvolution pipeline.
 
-Tiled, lazy, multi-GPU Richardson-Lucy deconvolution. Nothing is reimplemented
+Tiled, lazy, multi-GPU Richardson-Lucy deconvolution of 5D images (XYZ +
+channels + timepoints). Nothing is reimplemented
 in Python: we start a JVM, pull the BIOP tools from Maven, and orchestrate the
 ImageJ2 / BigDataViewer-Playground SciJava commands that do the actual work
 (``DatasetFromBioFormatsCreateCommand``, ``SourcesDeconvolveCommand``,

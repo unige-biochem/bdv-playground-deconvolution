@@ -1,7 +1,7 @@
 [project]
 name = "deconvolve"
 version = "0.1.0"
-description = "Tiled, lazy, multi-GPU Richardson-Lucy deconvolution for large 3D microscopy images"
+description = "Tiled, lazy, multi-GPU Richardson-Lucy deconvolution for large 5D microscopy images"
 readme = "readme.md"
 requires-python = ">=3.10"
 dependencies = [
