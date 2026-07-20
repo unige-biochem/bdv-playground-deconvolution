@@ -1,7 +1,7 @@
 """Smoke test: boot the JVM with our endpoints and resolve every Java class /
 service the pipeline needs. Does NOT run a deconvolution (no GPU/data needed)."""
 import scyjava
-from deconvolve.pipeline import init_imagej, _source_service, _sac_array, _jclass
+from bdvpg_deconvolution.pipeline import init_imagej, _source_service, _sac_array, _jclass
 
 ij = init_imagej(mode="headless")
 

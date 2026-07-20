@@ -1,7 +1,11 @@
-# Tiled Multi-GPU Deconvolution
+# BDV-Playground Deconvolution
 
-Richardson–Lucy deconvolution for large **5D** microscopy images (XYZ + channels
-+ timepoints), in Python.
+Tiled, lazy, multi-GPU Richardson–Lucy deconvolution for large **5D** microscopy
+images (XYZ + channels + timepoints), in Python.
+
+```
+pip install bdv-playground-deconvolution   # import bdvpg_deconvolution
+```
 
 It handles images far bigger than GPU memory by working **tiled** and **lazily**:
 each volume is split into overlapping blocks, each block is deconvolved on the
@@ -55,7 +59,7 @@ uv run python smoke_test.py    # boots the JVM, resolves every Java class used
 Headless and save-only — the intended batch / pipeline interface:
 
 ```bash
-uv run deconvolve \
+uv run bdvpg-deconvolve \
   --image  /path/to/image.czi \
   --psf    /path/to/psf.tif \
   --out    /path/to/output_folder \
@@ -64,7 +68,7 @@ uv run deconvolve \
 ```
 
 Writes `<image>.ome.tiff` to the output folder, preserving channel order.
-`deconvolve --help` lists every option.
+`bdvpg-deconvolve --help` lists every option.
 
 ## Notebook
 
@@ -79,7 +83,7 @@ Use `mode="interactive"` (needs a display).
 ## Library
 
 ```python
-from deconvolve import DeconvolveParams, init_imagej, run
+from bdvpg_deconvolution import DeconvolveParams, init_imagej, run
 
 ij = init_imagej(mode="headless", max_heap="32g")
 run(DeconvolveParams(
@@ -149,7 +153,7 @@ process deconvolve {
       path "${image.baseName}.ome.tiff"
     script:
       """
-      deconvolve --image ${image} --psf ${psf} --out . \\
+      bdvpg-deconvolve --image ${image} --psf ${psf} --out . \\
                  --iterations ${params.iterations} --threads ${params.threads}
       """
 }
@@ -162,7 +166,8 @@ cache, and a pre-resolved `.jgo` env so tasks don't each re-download.
 ## Reproducibility
 
 Two package managers are in play. `uv.lock` pins the Python side; the Java side
-is pinned by the coordinates in [`deconvolve/pipeline.py`](deconvolve/pipeline.py):
+is pinned by the coordinates in
+[`bdvpg_deconvolution/pipeline.py`](bdvpg_deconvolution/pipeline.py):
 
 ```python
 DEFAULT_ENDPOINTS = [

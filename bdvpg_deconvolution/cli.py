@@ -4,7 +4,7 @@ Thin wrapper around ``deconvolve.pipeline.run`` so the same core can be called
 from a shell, a Makefile, or a Nextflow process. Headless and save-only by
 default -- exactly what a batch/pipeline run wants.
 
-    deconvolve --image raw.czi --psf psf.tif --out ./deconvolved
+    bdvpg-deconvolve --image raw.czi --psf psf.tif --out ./deconvolved
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from .pipeline import DeconvolveParams, init_imagej, run
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="deconvolve",
+        prog="bdvpg-deconvolve",
         description="Tiled, lazy Richardson-Lucy GPU deconvolution "
                     "(BIOP / BigDataViewer-Playground) via PyImageJ.",
     )

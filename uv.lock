@@ -138,6 +138,28 @@ wheels = [
 ]
 
 [[package]]
+name = "bdv-playground-deconvolution"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "pyimagej" },
+    { name = "scyjava" },
+]
+
+[package.optional-dependencies]
+notebook = [
+    { name = "jupyterlab" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jupyterlab", marker = "extra == 'notebook'", specifier = ">=4.0" },
+    { name = "pyimagej", specifier = ">=1.8.0" },
+    { name = "scyjava", specifier = ">=1.12.0" },
+]
+provides-extras = ["notebook"]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -464,28 +486,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/67/b905b90d163af11878c1af8abafa4a25206335e112e284e413454543a6da/debugpy-1.8.21-cp314-cp314-win_amd64.whl", hash = "sha256:fe0744a12353406de0ae8ccff0d0a4a666f00801a3db8fd04e7a5f761cd520e8", size = 5373803, upload-time = "2026-06-01T19:31:09.469Z" },
     { url = "https://files.pythonhosted.org/packages/95/51/67e7cf11a53e40694f720457d5b3a1cdaaa3d5a9a633e482f225456b93ff/debugpy-1.8.21-py2.py3-none-any.whl", hash = "sha256:b1e37d333663c8851516a47364ef473da127f9caebe4417e6df6f5825a7e9a92", size = 5352888, upload-time = "2026-06-01T19:31:25.186Z" },
 ]
-
-[[package]]
-name = "deconvolve"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "pyimagej" },
-    { name = "scyjava" },
-]
-
-[package.optional-dependencies]
-notebook = [
-    { name = "jupyterlab" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jupyterlab", marker = "extra == 'notebook'", specifier = ">=4.0" },
-    { name = "pyimagej", specifier = ">=1.8.0" },
-    { name = "scyjava", specifier = ">=1.12.0" },
-]
-provides-extras = ["notebook"]
 
 [[package]]
 name = "decorator"
