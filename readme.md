@@ -1,180 +1,202 @@
-# Deconvolution Workflow
+# Tiled Multi-GPU Deconvolution
 
-Created by: **Nicolas Chiaruttini**
+Richardson–Lucy deconvolution for large multi-channel 3D microscopy images,
+in Python.
 
-GitLab: https://gitlab.unige.ch/unige-biochem/dudin-lab/deconvolution-workflow
+It handles images far bigger than GPU memory by working **tiled** and **lazily**:
+the volume is split into overlapping blocks, each block is deconvolved on the
+GPU, and nothing is computed until you actually browse or export the result.
+Multiple GPUs (or several contexts on one GPU) can be used in parallel.
 
----
+Under the hood it drives [BigDataViewer-Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html)
+and CLIJ2 through [PyImageJ](https://github.com/imagej/pyimagej) — the numerics
+are the well-tested BIOP/ImageJ implementation, not a reimplementation. Python
+is the orchestration layer.
 
-## Why deconvolution — axial cross-section
+## Why deconvolution
 
-The axial (Z) view is where widefield blur is worst and where deconvolution is
-expected to help most. Below is a representative axial cross-section, raw vs.
-deconvolved:
+The axial (Z) view is where widefield blur is worst and where deconvolution
+helps most:
 
 | Raw | Deconvolved |
 |-----|-------------|
 | ![Cross-section — raw](assets/CrossSection-Raw.png) | ![Cross-section — deconvolved](assets/CrossSection-Deconvolved.png) |
 
-Per-dataset lateral (Z projection) comparisons are on each dataset page.
+## Install
 
----
+```bash
+uv sync                      # core
+uv sync --extra notebook     # + JupyterLab
+```
 
-## Datasets
+**No conda required, and you do not need to install Java or Maven yourself.**
+`scyjava`/`jgo` provision both automatically via
+[`cjdk`](https://pypi.org/project/cjdk) on first use, into a user-level cache
+(`%LOCALAPPDATA%\cjdk` on Windows, `~/.cache/cjdk` elsewhere).
 
-The workflow is being tested on several datasets. Each has its own PSF — the per-dataset pages below record all of that:
+The only real prerequisite is an **OpenCL-capable GPU** with vendor drivers
+installed — that part is not pip-installable.
 
-| Dataset | Sample | Z step | Details |
-|---------|--------|-------:|---------|
-| **Paula** | 4-channel widefield fluorescence | 500 nm | [datasets/paula.md](datasets/paula.md) |
-| **Baukje** | *Dictyostelium* + ConA (widefield) | 330 nm | [datasets/baukje.md](datasets/baukje.md) |
+> **First run is heavy.** Installing is a few MB, but the first *run* downloads
+> a JDK (~190 MB), Maven, and the ImageJ2/BIOP Maven tree — several hundred MB,
+> once, then cached. It needs `maven.scijava.org` reachable.
 
-See each page for the exact acquisition metadata,
-PSF parameters and before/after results.
+Verify your setup without a GPU or any data:
 
+```bash
+uv run python smoke_test.py    # boots the JVM, resolves every Java class used
+```
 
----
+## Quick start (CLI)
 
-## Point Spread Function (PSF)
+Headless and save-only — the intended batch / pipeline interface:
 
-No **empirical PSF** (e.g. from sub-resolution beads) was available, so a
-**theoretical PSF** is generated with the
+```bash
+uv run deconvolve \
+  --image  /path/to/image.czi \
+  --psf    /path/to/psf.tif \
+  --out    /path/to/output_folder \
+  --iterations 120 \
+  --threads 10
+```
+
+Writes `<image>.ome.tiff` to the output folder, preserving channel order.
+`deconvolve --help` lists every option.
+
+## Notebook
+
+```bash
+uv run jupyter lab
+```
+
+Open [`notebooks/Deconvolve.ipynb`](notebooks/Deconvolve.ipynb) for interactive
+parameter tuning and viewing raw + deconvolved side by side in BigDataViewer.
+Use `mode="interactive"` (needs a display).
+
+## Library
+
+```python
+from deconvolve import DeconvolveParams, init_imagej, run
+
+ij = init_imagej(mode="headless", max_heap="32g")
+run(DeconvolveParams(
+    image_file="image.czi",
+    psf_file="psf.tif",
+    output_folder="out/",
+    num_iterations=120,
+), ij=ij)
+```
+
+A JVM starts **once per process**, so `init_imagej()` must be called before any
+work and its `mode` cannot change afterwards.
+
+## Point Spread Function
+
+One **single-channel PSF** is supplied per image and reused for all channels.
+If no empirical PSF (e.g. from sub-resolution beads) is available, a theoretical
+one can be generated with the
 [PSF Generator](https://bigwww.epfl.ch/algorithms/psfgenerator/) Fiji plugin
-using the **Born & Wolf 3D optical model**.
+using the Born & Wolf 3D optical model — match its Z step to your acquisition's
+axial sampling.
 
-One **single-channel PSF** is generated **per dataset** and reused for all
-channels. Because the datasets share the same optics, the PSF parameters are
-identical **except for the Z step**, which is matched to each acquisition's
-axial sampling. The exact parameters and the resulting theoretical resolution
-are listed on each dataset page.
+![Theoretical PSF](assets/PSF-Theoretical-Generated.png)
 
-> A single representative emission wavelength is used to generate **one** PSF
-> applied to every channel — see [open questions](#open-questions).
+## Parameters
 
----
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--iterations` | 120 | Richardson–Lucy steps |
+| `--regularization` | 0.0 | 0 = none; increase to tame noise/ringing |
+| `--no-non-circulant` | (on) | disable non-circulant edge handling |
+| `--block-size-x/y/z` | 256/256/64 | tiling — lower if you run out of GPU memory |
+| `--overlap-size` | 16 | tile overlap, avoids seams |
+| `--threads` | 10 | CPU-side workers feeding the GPU pool |
+| `--output-pixel-type` | keep original | or `Float` |
+| `--compression` | LZW | OME-TIFF compression |
+| `--resolution-levels` | 1 | OME-TIFF pyramid levels |
+| `--unit` | MICROMETER | coordinate unit |
+| `--show` | off | open BigDataViewer (needs `--mode interactive`) |
+| `--no-save` | (save on) | view only, write nothing |
+| `--overwrite` | off | refuse to clobber existing output unless set |
+| `--mode` | headless | `headless` / `interactive` / `gui` |
+| `--max-heap` | — | JVM heap, e.g. `32g` |
 
-## Deconvolution
+## Multi-GPU configuration
 
-- **Tool:** [BigDataViewer Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html) **Tiled Multi-GPU deconvolution** in ImageJ / Fiji
-- **Algorithm:** Richardson–Lucy with non-circulant edge handling and total variation regularization
-- **Regularization:** none
-- **Iterations:** 120 deconvolution steps
-- **PSF:** the dataset's theoretical PSF, stored beforehand
-- **Output:** result resaved into the `deconvolved` folder of the dataset
+By default deconvolution runs on a single GPU (device `0`). The device pool is
+configured through ImageJ preferences — a `Pool Configuration` string of the
+form `device_idx:n_workers, device_idx:n_workers`. For example `0:2, 1:4` runs
+2 contexts on GPU 0 and 4 on GPU 1, i.e. **6 GPU workers**. It persists in the
+ImageJ preferences and applies to subsequent runs.
 
----
+> **Pool workers vs `--threads`.** The pool config sets the number of **GPU-side**
+> workers. `--threads` is the number of **CPU-side** workers feeding that pool
+> (load, convert, hand to GPU, retrieve, write). Keep `--threads` a bit higher
+> than the total GPU workers so the GPUs are never left waiting.
 
-## Running it yourself — `Deconvolve.groovy`
+## Nextflow
 
-[`Deconvolve.groovy`](Deconvolve.groovy) wraps the whole pipeline as a single
-Fiji script: it opens a multi-channel image and a matching single-channel PSF
-via Bio-Formats, runs **tiled, lazy Richardson–Lucy GPU deconvolution** (CLIJ2)
-block by block, and can **view the result in BigDataViewer**, **export it as an
-OME-TIFF** (channel order preserved), or both. The computation is lazy —
-browsing the sources in BigDataViewer or writing the output file is what
-actually triggers the block-by-block GPU work.
+The CLI is the intended Nextflow interface — one image per task, headless:
 
-### View, save, or both
-
-Two independent options control what happens after deconvolution:
-
-- **Show sources in BigDataViewer** — opens the raw and deconvolved sources for a
-  quick visual check (no file written).
-- **Save deconvolved output (OME-TIFF)** — writes `<imageName>.ome.tiff` to the
-  output folder.
-
-Enable either or both. With saving off, the output folder is optional and no
-file is written; with only saving on, the sources are freed after export (handy
-for batch runs).
-
-### Requirements
-
-An up-to-date **Fiji** with the following update sites enabled
-(`Help ▸ Update… ▸ Manage update sites`):
-
-- **UNIGE-Biochem**
-- **clij**
-- **clij2**
-- **clijx-deconvolution**
-
-An OpenCL-capable **GPU** is used through CLIJ2.
-
-### Configuring the GPU pool (optional)
-
-By default the deconvolution runs on a single GPU (device `0`). If you have
-multiple GPUs — or want to run several parallel contexts on one GPU — configure
-the OpenCL device pool:
-
-`Edit ▸ Options ▸ CLIJ Pool Options`
-
-The dialog lists the available device indices and takes a **`Pool
-Configuration`** string of the form `device_idx:n_workers, device_idx:n_workers`
-(default `0:1`). For example, `0:2, 1:4` runs **2** contexts on GPU 0 and **4**
-on GPU 1 — **6 GPU workers** in total. The setting is persisted in the ImageJ
-preferences, so it applies to all subsequent runs.
-
-> **Pool workers vs. `Number of GPU streams / threads`.** The pool config above
-> sets the number of **GPU-side** workers. The script's **`Number of GPU streams
-> / threads`** parameter is the number of **CPU-side** workers that feed the pool
-> (loading, converting, handing blocks over to the GPU, then retrieving and
-> writing the result). It's generally good to keep a few **more** CPU workers
-> than the total number of GPU pool workers, so the GPUs are never left waiting.
-
-### How to run (single image)
-
-1. Open the script in Fiji: drag `Deconvolve.groovy` onto the main window, or
-   `File ▸ Open…` then `Run` in the Script Editor.
-2. Fill in the dialog and run:
-   - **Image to deconvolve** — the multi-channel raw image (e.g. CZI).
-   - **PSF image** — a single-channel PSF (one PSF is used for all channels).
-   - **Show sources in BigDataViewer / Save deconvolved output** — pick view,
-     save, or both (at least one).
-   - **Output folder** — where `<imageName>.ome.tiff` is written when saving.
-3. The result is shown in BigDataViewer and/or written to the output folder.
-
-### How to batch process
-
-In the Fiji Script Editor, use the **`Batch`** button (next to `Run`). Because
-the inputs are declared as script parameters, Fiji lets you point the `File`
-inputs at a folder and runs the script over every file — reusing the same PSF
-and settings for all of them.
-
-### Key parameters
-
-| Parameter                 | Default   | Notes                                                    |
-|---------------------------|-----------|----------------------------------------------------------|
-| Number of iterations      | 120       | Richardson–Lucy steps.                                   |
-| Regularization factor     | 0.000     | 0 = none; increase to tame noise/ringing.                |
-| Non-circulant             | true      | Reduces edge artefacts.                                  |
-| Block size X / Y / Z      | 256/256/64 | Tiling — lower it if you run out of GPU memory.          |
-| Block overlap             | 16 px     | Overlap between tiles to avoid seams.                    |
-| GPU streams / threads     | 10        | Parallel blocks on the GPU.                              |
-| Output pixel type         | keep original | Or force `Float`.                                    |
-| OME-TIFF compression      | LZW       | Export compression.                                      |
-| Show sources in BigDataViewer | true  | Displays raw + deconvolved for a quick visual check.     |
-| Save deconvolved output   | true      | Write the OME-TIFF. Untick to only view.                 |
-| Overwrite                 | false     | Refuses to clobber an existing output unless ticked.     |
-
-> The script defaults (**120 iterations**, **no regularization**) match the
-> datasets described here — tune them for your own data.
-
-
----
-
-### Open questions
-
-- **One PSF for all channels.** A single emission wavelength is used to generate
-  the PSF applied to every channel — is a per-channel PSF worth it?
-
----
-
-## Data location
-
-Raw and deconvolved data are stored outside the repo:
-
-```
-F:\user-projects\data\dudin-lab\deconvolution-workflow
+```groovy
+process deconvolve {
+    input:
+      tuple val(sample), path(image), path(psf)
+    output:
+      path "${image.baseName}.ome.tiff"
+    script:
+      """
+      deconvolve --image ${image} --psf ${psf} --out . \\
+                 --iterations ${params.iterations} --threads ${params.threads}
+      """
+}
 ```
 
-(Also linked via `Shared_Folder.lnk`.) Each dataset lives in its own subfolder
-(`paula\`, `baukje\`).
+One JVM boots per invocation, so one-image-per-task is the right granularity.
+For reproducible runs, containerise with the OpenCL runtime, a pre-warmed cjdk
+cache, and a pre-resolved `.jgo` env so tasks don't each re-download.
+
+## Reproducibility
+
+Two package managers are in play. `uv.lock` pins the Python side; the Java side
+is pinned by the coordinates in [`deconvolve/pipeline.py`](deconvolve/pipeline.py):
+
+```python
+DEFAULT_ENDPOINTS = [
+    "net.imagej:imagej:2.16.0",
+    "ch.epfl.biop:bigdataviewer-biop-tools:0.21.0",
+]
+```
+
+Bump those and cut a release when you want to move the Java side.
+
+The JVM itself is *not* pinned by default — cjdk prefers a suitable system JDK
+and downloads one otherwise. To pin it, before the first `init_imagej()`:
+
+```python
+from scyjava import config
+config.set_java_constraints(fetch="always", vendor="zulu", version="21")
+```
+
+## Status
+
+The pipeline is a faithful transcription of a production Fiji/Groovy workflow,
+and the interop layer is verified (`smoke_test.py` passes: JVM boots, all Java
+classes and the `SourceService` resolve). A full GPU run has **not** been
+exercised end-to-end here — validate against a known dataset first.
+
+Not yet implemented:
+
+- `--check-gpu` — enumerate OpenCL devices and fail early with a readable
+  message instead of a CLIJ stack trace mid-run.
+- `--prefetch` — warm the JDK/Maven/jgo caches ahead of first use.
+
+## Credits
+
+Built on the BigDataViewer-Playground / Kheops / CLIJ2 stack from
+**BIOP — EPFL**. Original Fiji Groovy implementation and this Python port by
+Nicolas Chiaruttini. Free to reuse.
+
+The lab-specific version this was generalised from — including the original
+`Deconvolve.groovy` and per-dataset notes — is preserved on the
+`specific-use-cases` branch.

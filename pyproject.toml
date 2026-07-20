@@ -1,0 +1,28 @@
+[project]
+name = "deconvolve"
+version = "0.1.0"
+description = "Tiled, lazy, multi-GPU Richardson-Lucy deconvolution for large 3D microscopy images"
+readme = "readme.md"
+requires-python = ">=3.10"
+dependencies = [
+    # scyjava >=1.12 / jgo >=3.1 provide automatic JDK + Maven provisioning via
+    # cjdk. Older versions require a system Java and Maven, which would break
+    # the "no conda, no manual Java" install story.
+    "pyimagej>=1.8.0",
+    "scyjava>=1.12.0",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "jupyterlab>=4.0",
+]
+
+[project.scripts]
+deconvolve = "deconvolve.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["deconvolve"]
