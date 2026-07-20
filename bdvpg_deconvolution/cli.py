@@ -1,8 +1,12 @@
 """Command-line entry point.
 
-Thin wrapper around ``deconvolve.pipeline.run`` so the same core can be called
-from a shell, a Makefile, or a Nextflow process. Headless and save-only by
-default -- exactly what a batch/pipeline run wants.
+Thin wrapper around :func:`bdvpg_deconvolution.pipeline.run` so the same core
+can be called from a shell, a Makefile, or a Nextflow process.
+
+This interface is deliberately **save-only**: it deconvolves and writes an
+OME-TIFF. Viewing results in BigDataViewer is a job for the notebook, which can
+keep the JVM and its windows alive -- a CLI process exits as soon as the work is
+done, tearing the JVM (and any window) down with it.
 
     bdvpg-deconvolve --image raw.czi --psf psf.tif --out ./deconvolved
 """
@@ -24,14 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     # I/O
     p.add_argument("--image", required=True, help="Multi-channel image to deconvolve")
     p.add_argument("--psf", required=True, help="Single-channel PSF image")
-    p.add_argument("--out", dest="output_folder", default=None,
-                   help="Output folder for <image>.ome.tiff (required unless --no-save)")
-
-    # What to do
-    p.add_argument("--show", dest="show_in_bdv", action="store_true",
-                   help="Show sources in BigDataViewer (needs a display; use --mode interactive)")
-    p.add_argument("--no-save", dest="save_output", action="store_false",
-                   help="Do not write the OME-TIFF (view only)")
+    p.add_argument("--out", dest="output_folder", required=True,
+                   help="Output folder for <image>.ome.tiff")
     p.add_argument("--overwrite", action="store_true",
                    help="Overwrite the output if it already exists")
 
@@ -59,8 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     # JVM / ImageJ
     p.add_argument("--mode", default="headless",
-                   choices=["headless", "interactive", "gui"],
-                   help="PyImageJ mode; use interactive/gui for --show")
+                   choices=["headless", "interactive"],
+                   help="PyImageJ mode (default: headless). Nothing is displayed "
+                        "either way; 'interactive' is an escape hatch for the "
+                        "rare command that misbehaves under headless ImageJ.")
     p.add_argument("--max-heap", default=None,
                    help="JVM max heap, e.g. 32g")
     return p
@@ -85,8 +85,8 @@ def main(argv=None) -> int:
         non_circulant=args.non_circulant,
         regularization_factor=args.regularization_factor,
         n_threads=args.n_threads,
-        show_in_bdv=args.show_in_bdv,
-        save_output=args.save_output,
+        show_in_bdv=False,  # CLI is save-only; viewing belongs in the notebook
+        save_output=True,
         compression=args.compression,
         n_resolution_levels=args.n_resolution_levels,
         overwrite=args.overwrite,
@@ -98,9 +98,6 @@ def main(argv=None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    # In headless mode the JVM keeps non-daemon threads alive; exit explicitly.
-    if args.mode == "headless":
-        return 0
     return 0
 
 

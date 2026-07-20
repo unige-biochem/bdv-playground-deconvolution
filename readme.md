@@ -122,11 +122,13 @@ axial sampling.
 | `--compression` | LZW | OME-TIFF compression |
 | `--resolution-levels` | 1 | OME-TIFF pyramid levels |
 | `--unit` | MICROMETER | coordinate unit |
-| `--show` | off | open BigDataViewer (needs `--mode interactive`) |
-| `--no-save` | (save on) | view only, write nothing |
 | `--overwrite` | off | refuse to clobber existing output unless set |
-| `--mode` | headless | `headless` / `interactive` / `gui` |
+| `--mode` | headless | escape hatch if a command misbehaves headless |
 | `--max-heap` | — | JVM heap, e.g. `32g` |
+
+The CLI is **save-only** by design — it deconvolves and writes an OME-TIFF.
+Viewing results is the notebook's job: a CLI process exits as soon as the work
+is done, which tears down the JVM and any BigDataViewer window with it.
 
 ## Multi-GPU configuration
 
