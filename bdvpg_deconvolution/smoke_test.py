@@ -14,6 +14,8 @@ CLASSES = [
     "ch.epfl.biop.kheops.command.KheopsExportSourcesCommand",
     "sc.fiji.bdvpg.scijava.service.SourceService",
     "sc.fiji.bdvpg.service.SourceServices",
+    "sc.fiji.bdvpg.scijava.service.tree.SourceTree",
+    "sc.fiji.bdvpg.scijava.service.tree.FilterNode",
 ]
 
 
@@ -27,6 +29,11 @@ def main() -> int:
     svc = _source_service(ij)
     print("SourceService:", svc)
     print("has getSourcesFromDataset:", hasattr(svc, "getSourcesFromDataset"))
+
+    # The multi-series lookup walks the SourceService tree; confirm it exists
+    # headless (SourceTree is Swing-backed but built with makeGUI=false here).
+    root = svc.tree().root()
+    print("tree root (headless):", root, "children:", root.childCount())
 
     # typed-array helper
     SAC = _jclass("bdv.viewer.SourceAndConverter")

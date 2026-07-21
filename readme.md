@@ -102,6 +102,19 @@ run(DeconvolveParams(
 A JVM starts **once per process**, so `init_imagej()` must be called before any
 work and its `mode` cannot change afterwards.
 
+`DeconvolveParams` takes `series` and `series_naming` alongside the CLI flags.
+To inspect a file's series without running anything, open it and ask the
+source service — `describe_series()` returns `(index, name, n_channels)` tuples:
+
+```python
+from bdvpg_deconvolution.pipeline import describe_series
+```
+
+Note that reusing one gateway for many files keeps every opened source
+registered until `run()` cleans them up, which it only does when
+`show_in_bdv=False`. In a long notebook session, re-opening a file whose
+dataset name was already used can leave stale nodes behind.
+
 ## Point Spread Function
 
 One **single-channel PSF** is supplied per image and reused for all channels.
@@ -124,6 +137,8 @@ one can be generated with the
 | `--output-pixel-type` | keep original | or `Float` |
 | `--compression` | LZW | OME-TIFF compression |
 | `--resolution-levels` | 1 | OME-TIFF pyramid levels |
+| `--series` | — | which image of a [multi-series file](#multi-series-files) to process |
+| `--series-naming` | name | `name` or `index`, suffix for multi-series output |
 | `--range-channels` | all | subset of channels to export, see [Selecting a sub-range](#selecting-a-sub-range) |
 | `--range-slices` | all | subset of Z slices to export |
 | `--range-frames` | all | subset of timepoints to export |
@@ -131,6 +146,63 @@ one can be generated with the
 | `--overwrite` | off | refuse to clobber existing output unless set |
 | `--mode` | headless | escape hatch if a command misbehaves headless |
 | `--max-heap` | — | JVM heap, e.g. `32g` |
+
+### Multi-series files
+
+Many formats (CZI, LIF, ND2…) hold several images in one file — typically one
+per stage position. **Single-series files need no extra flag** and behave
+exactly as before, writing `<image>.ome.tiff`.
+
+A multi-series file is refused unless you say which image you mean, because the
+alternative would be to deconvolve unrelated positions together as if they were
+channels of one image. The error lists what is inside:
+
+```
+$ bdvpg-deconvolve --image day4to5.czi --psf psf.tif --out ./out
+ERROR: 'day4to5.czi' contains 4 series; choose one with series=<index> (CLI: --series <index>):
+  0  Day4to5 - Position 5  (2 channels)
+  1  Day4to5 - Position 6  (2 channels)
+  2  Day4to5 - Position 7  (2 channels)
+  3  Day4to5 - Position 8  (2 channels)
+
+Each series is written to its own file. The name defaults to
+<image>_<series name>.ome.tiff; set series_naming='index'
+(CLI: --series-naming index) for <image>_<index>.ome.tiff instead.
+```
+
+Pick one with `--series`, which is zero-based and indexes that listing:
+
+```bash
+bdvpg-deconvolve --image day4to5.czi --psf psf.tif --out ./out --series 2
+# -> out/day4to5_Day4to5_-_Position_7.ome.tiff
+```
+
+Output naming for a multi-series file follows `--series-naming`:
+
+| `--series-naming` | Output for series 2 above |
+|-------------------|---------------------------|
+| `name` (default) | `day4to5_Day4to5_-_Position_7.ome.tiff` |
+| `index` | `day4to5_2.ome.tiff` |
+
+`name` keeps the acquisition's own labels, which survive a re-export in a
+different order; `index` gives short, predictable names that are easier to glob
+in a pipeline. Series names are sanitised for the filesystem — spaces become
+underscores and `<>:"/\|?*` are replaced.
+
+Since only one series is processed per run, a whole file is covered by looping
+over the indices, each run producing its own OME-TIFF:
+
+```bash
+for i in 0 1 2 3; do
+  bdvpg-deconvolve --image day4to5.czi --psf psf.tif --out ./out --series $i
+done
+```
+
+Note this pays the JVM startup cost per series. From Python you can instead call
+`run()` repeatedly against a single `init_imagej()` gateway.
+
+The PSF is treated differently on purpose: its first source is always used, as
+before, so a multi-series PSF is not an error.
 
 ### Selecting a sub-range
 

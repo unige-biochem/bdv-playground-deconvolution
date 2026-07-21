@@ -32,6 +32,16 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Output folder for <image>.ome.tiff")
     p.add_argument("--overwrite", action="store_true",
                    help="Overwrite the output if it already exists")
+    p.add_argument("--series", type=int, default=None,
+                   help="Which series (image) of a multi-series file to "
+                        "process, zero-based. Optional for single-series "
+                        "files; multi-series files are refused without it, "
+                        "and the error lists what is inside.")
+    p.add_argument("--series-naming", default="name", choices=["name", "index"],
+                   help="Output suffix for a multi-series file: 'name' "
+                        "(default) writes <image>_<series name>.ome.tiff, "
+                        "'index' writes <image>_<index>.ome.tiff. "
+                        "Single-series files are always <image>.ome.tiff.")
 
     # Deconvolution parameters (defaults match the reference Fiji workflow)
     p.add_argument("--unit", default="MICROMETER",
@@ -102,6 +112,8 @@ def main(argv=None) -> int:
         compression=args.compression,
         n_resolution_levels=args.n_resolution_levels,
         overwrite=args.overwrite,
+        series=args.series,
+        series_naming=args.series_naming,
         range_channels=args.range_channels,
         range_slices=args.range_slices,
         range_frames=args.range_frames,

@@ -17,6 +17,7 @@ Derived from a Fiji/Groovy workflow by BIOP - EPFL (preserved on the
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -109,6 +110,74 @@ def _source_service(ij):
     return ij.context().getService(SourceService)
 
 
+# --- Multi-series support ----------------------------------------------------
+# A file can hold several images ("series" in Bio-Formats terms, e.g. one per
+# stage position). ``getSourcesFromDataset`` flattens every channel of every
+# series into one list, which would silently deconvolve unrelated images
+# together, so instead we group them via the SourceService tree:
+#
+#     root > <dataset name> > "ImageName" > <series> > channels
+#
+# The tree is populated headlessly too -- SourceService.initialize() builds it
+# with ``new SourceTree(this, context(), false)`` when the UI service reports
+# headless, so only the JFrame is skipped, not the nodes.
+
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _sanitize_filename(name: str) -> str:
+    """Turn a series name into a filename fragment.
+
+    ``"Day4to5 - Position 5"`` becomes ``"Day4to5_-_Position_5"``.
+    """
+    cleaned = _INVALID_FILENAME_CHARS.sub("_", str(name))
+    cleaned = re.sub(r"\s+", "_", cleaned.strip())
+    cleaned = re.sub(r"_{2,}", "_", cleaned).strip("._")
+    return cleaned or "series"
+
+
+def _series_nodes(source_service, dataset_name: str):
+    """Return the per-series ``FilterNode``s of a dataset, or None.
+
+    None means the expected tree layout was not found, in which case the caller
+    should fall back to treating the dataset as a single series.
+    """
+    dataset_node = source_service.tree().root().child(dataset_name)
+    if dataset_node is None:
+        return None
+    image_name_node = dataset_node.child("ImageName")
+    if image_name_node is None:
+        return None
+    nodes = list(image_name_node.children())
+    return nodes or None
+
+
+def describe_series(source_service, dataset_name: str):
+    """List ``(index, name, n_channels)`` for each series of an opened dataset.
+
+    The index is the position in this listing -- it is what :attr:`
+    DeconvolveParams.series` expects.
+    """
+    nodes = _series_nodes(source_service, dataset_name)
+    if nodes is None:
+        return []
+    return [(i, str(n.name()), len(n.sources())) for i, n in enumerate(nodes)]
+
+
+def _format_series_listing(image_file, series) -> str:
+    width = max(len(name) for _, name, _ in series)
+    lines = [f"  {i}  {name:<{width}}  ({n} channel{'s' if n != 1 else ''})"
+             for i, name, n in series]
+    return (
+        f"'{Path(image_file).name}' contains {len(series)} series; "
+        f"choose one with series=<index> (CLI: --series <index>):\n"
+        + "\n".join(lines)
+        + "\n\nEach series is written to its own file. The name defaults to "
+          "<image>_<series name>.ome.tiff; set series_naming='index' "
+          "(CLI: --series-naming index) for <image>_<index>.ome.tiff instead."
+    )
+
+
 # --- Parameters --------------------------------------------------------------
 
 @dataclass
@@ -131,6 +200,10 @@ class DeconvolveParams:
     compression: str = "LZW"  # LZW | Uncompressed | JPEG-2000 | JPEG-2000 Lossy | JPEG
     n_resolution_levels: int = 1
     overwrite: bool = False
+    # Which series (image) of a multi-series file to process. None is fine for
+    # single-series files; multi-series files require an explicit index.
+    series: Optional[int] = None
+    series_naming: str = "name"  # name | index -- suffix for multi-series output
     # Export sub-range selection (Kheops IntRangeParser syntax, "" = everything).
     # Applied at export time, on the deconvolved sources -- blocks outside the
     # selection are never computed, so a narrow range is genuinely cheaper.
@@ -174,26 +247,18 @@ def run(params: DeconvolveParams, ij=None):
             "Nothing to do: enable show_in_bdv, save_output, or both."
         )
 
-    output_file = None
-    if params.save_output:
-        if params.output_folder is None:
-            raise ValueError(
-                "No output folder chosen: set output_folder, or disable "
-                "save_output to only view the result."
-            )
-        output_file = File(str(Path(params.output_folder).resolve()),
-                           image_name + ".ome.tiff")
-        if output_file.exists():
-            if params.overwrite:
-                if not output_file.delete():
-                    raise RuntimeError(
-                        f"Could not delete pre-existing output file: {output_file}"
-                    )
-            else:
-                raise FileExistsError(
-                    f"Output file already exists (set overwrite=True to replace): "
-                    f"{output_file}"
-                )
+    if params.save_output and params.output_folder is None:
+        raise ValueError(
+            "No output folder chosen: set output_folder, or disable "
+            "save_output to only view the result."
+        )
+    if params.series_naming not in ("name", "index"):
+        raise ValueError(
+            f"series_naming must be 'name' or 'index', got "
+            f"{params.series_naming!r}"
+        )
+    # The output name depends on which series is picked, so it is resolved
+    # after the file is opened (opening is lazy, hence cheap).
 
     # The OME-TIFF exporter only accepts MILLIMETER or MICROMETER; map the rest.
     export_unit = "MILLIMETER" if params.unit == "MILLIMETER" else "MICROMETER"
@@ -217,20 +282,71 @@ def run(params: DeconvolveParams, ij=None):
         )
         return source_service.getSourcesFromDataset(spimdata)
 
-    # ---- 1. Open the image and the PSF -------------------------------------
-    image_sources = open_sources(image_file, image_name)
-    psf_sources = open_sources(psf_file, psf_name)
-
-    if image_sources.isEmpty():
+    # ---- 1. Open the image and pick a series -------------------------------
+    # The image is opened before the PSF so the series lookup cannot hit the
+    # PSF's node should both files share a base name.
+    all_image_sources = open_sources(image_file, image_name)
+    if all_image_sources.isEmpty():
         raise RuntimeError(f"No source found in image file: {image_file}")
+
+    series = describe_series(source_service, image_name)
+    series_suffix = ""
+
+    if len(series) > 1:
+        if params.series is None:
+            raise ValueError(_format_series_listing(image_file, series))
+        if not 0 <= params.series < len(series):
+            raise ValueError(
+                f"series={params.series} is out of range.\n"
+                + _format_series_listing(image_file, series)
+            )
+        index, series_name, _ = series[params.series]
+        nodes = _series_nodes(source_service, image_name)
+        image_sources = list(nodes[params.series].sources())
+        series_suffix = ("_" + _sanitize_filename(series_name)
+                         if params.series_naming == "name"
+                         else f"_{index}")
+        print(f"Opened '{image_name}' series {index} '{series_name}' : "
+              f"{len(image_sources)} channel(s) "
+              f"({len(series)} series in the file)")
+    else:
+        # Single series, or a tree layout we do not recognise: keep the flat
+        # list, which is what every single-series file resolved to before.
+        if params.series not in (None, 0):
+            raise ValueError(
+                f"series={params.series} was requested but "
+                f"'{image_file.name}' holds a single series (use series=0 "
+                f"or leave it unset)."
+            )
+        image_sources = list(all_image_sources)
+        print(f"Opened '{image_name}' : {len(image_sources)} channel(s)")
+
+    # ---- 1b. Open the PSF --------------------------------------------------
+    # A multi-series PSF is unusual; as before, the first source is used.
+    psf_sources = open_sources(psf_file, psf_name)
     if psf_sources.isEmpty():
         raise RuntimeError(f"No source found in PSF file: {psf_file}")
 
     psf_source = psf_sources.get(0)  # one PSF for all channels
-
-    print(f"Opened '{image_name}' : {image_sources.size()} channel(s)")
     print(f"Opened PSF '{psf_name}' : {psf_sources.size()} source(s), "
           f"using the first one")
+
+    # ---- 1c. Resolve and validate the output file --------------------------
+    output_file = None
+    if params.save_output:
+        output_file = File(str(Path(params.output_folder).resolve()),
+                           image_name + series_suffix + ".ome.tiff")
+        if output_file.exists():
+            if params.overwrite:
+                if not output_file.delete():
+                    raise RuntimeError(
+                        f"Could not delete pre-existing output file: {output_file}"
+                    )
+            else:
+                raise FileExistsError(
+                    f"Output file already exists (set overwrite=True to replace): "
+                    f"{output_file}"
+                )
 
     # ---- 2. Optionally show the raw sources in BDV -------------------------
     SourceServices = None
@@ -303,7 +419,8 @@ def run(params: DeconvolveParams, ij=None):
     # ---- 6. Sources cleanup ------------------------------------------------
     if not params.show_in_bdv:
         source_service.remove(_sac_array(deconvolved))
-        source_service.remove(_sac_array(image_sources))
+        # every series, not just the selected one
+        source_service.remove(_sac_array(all_image_sources))
         source_service.remove(_sac_array(psf_sources))
 
     return result_path
