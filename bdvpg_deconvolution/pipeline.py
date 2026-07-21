@@ -31,6 +31,7 @@ import scyjava
 DEFAULT_ENDPOINTS = [
     "net.imagej:imagej:2.16.0",
     "ch.epfl.biop:bigdataviewer-biop-tools:0.21.0",
+    "ch.epfl.biop:quick-start-czi-reader:0.3.0"
 ]
 
 # Module-level singleton: a JVM can only be started once per process.
