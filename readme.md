@@ -15,10 +15,7 @@ Multiple GPUs (or several contexts on one GPU) can be used in parallel.
 All channels and timepoints are processed and written out by default, in the
 original order, using a single PSF.
 
-Under the hood it drives [BigDataViewer-Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html)
-and CLIJ2 through [PyImageJ](https://github.com/imagej/pyimagej) — the numerics
-are the well-tested BIOP/ImageJ implementation, not a reimplementation. Python
-is the orchestration layer.
+Under the hood it drives [BigDataViewer-Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html) and [CLIJ2](https://github.com/clij/clij2-fft) through [PyImageJ](https://github.com/imagej/pyimagej). Python is the orchestration layer.
 
 ## Why deconvolution
 
@@ -102,9 +99,7 @@ work and its `mode` cannot change afterwards.
 One **single-channel PSF** is supplied per image and reused for all channels.
 If no empirical PSF (e.g. from sub-resolution beads) is available, a theoretical
 one can be generated with the
-[PSF Generator](https://bigwww.epfl.ch/algorithms/psfgenerator/) Fiji plugin
-using the Born & Wolf 3D optical model — match its Z step to your acquisition's
-axial sampling.
+[PSF Generator](https://bigwww.epfl.ch/algorithms/psfgenerator/) Fiji plugin.
 
 ![Theoretical PSF](assets/PSF-Theoretical-Generated.png)
 
@@ -203,10 +198,4 @@ Not yet implemented:
 
 ## Credits
 
-Built on the BigDataViewer-Playground / Kheops / CLIJ2 stack from
-**BIOP — EPFL**. Original Fiji Groovy implementation and this Python port by
-Nicolas Chiaruttini. Free to reuse.
-
-The lab-specific version this was generalised from — including the original
-`Deconvolve.groovy` and per-dataset notes — is preserved on the
-`specific-use-cases` branch.
+Built on the BigDataViewer-Playground / Kheops / CLIJ2 stack.
