@@ -4,6 +4,11 @@ version = "0.1.0"
 description = "Tiled, lazy, multi-GPU Richardson-Lucy deconvolution for large 5D microscopy images"
 readme = "readme.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Nicolas Chiaruttini", email = "nicolas.chiaruttini@unige.ch" },
+]
 dependencies = [
     # scyjava >=1.12 / jgo >=3.1 provide automatic JDK + Maven provisioning via
     # cjdk. Older versions require a system Java and Maven, which would break

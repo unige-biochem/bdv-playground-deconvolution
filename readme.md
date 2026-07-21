@@ -199,3 +199,20 @@ Not yet implemented:
 ## Credits
 
 Built on the BigDataViewer-Playground / Kheops / CLIJ2 stack.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). © Nicolas Chiaruttini, Department of
+Biochemistry, University of Geneva.
+
+That covers this package's own source, which is pure Python orchestration and
+ships no Java code. The Java stack it drives is resolved from Maven on **your**
+machine at first run, and parts of it are GPL — notably Bio-Formats
+`formats-gpl`, which supplies the readers for proprietary formats such as
+`.czi`. Simply installing and running this package does not put you under those
+terms; the GPL restricts copying, distribution and modification, not use.
+
+If you **redistribute a bundle** that contains those jars — most likely the
+container image suggested in [Nextflow](#nextflow) — you are distributing a
+combined work, and the bundle as a whole must go out under GPL terms. The
+sources here remain MIT for anyone who takes them on their own.
