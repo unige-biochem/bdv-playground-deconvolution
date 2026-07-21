@@ -34,7 +34,8 @@ pip install "bdv-playground-deconvolution[notebook]"     # + JupyterLab
 ```
 
 Works in any Python ≥3.10 environment — venv, conda, or `uv pip`. This puts
-`bdvpg-deconvolve` and `bdvpg-smoke-test` on your PATH; call them directly, no
+`bdvpg-deconvolve`, `bdvpg-gpu-pool` and `bdvpg-smoke-test` on your PATH; call
+them directly, no
 `uv run` prefix. (If you are working from a clone instead, see
 [Development](#development).)
 
@@ -54,6 +55,7 @@ Verify your setup without a GPU or any data:
 
 ```bash
 bdvpg-smoke-test    # boots the JVM, resolves every Java class used
+bdvpg-gpu-pool      # shows the GPUs and the configured pool
 ```
 
 ## Quick start (CLI)
@@ -110,6 +112,10 @@ source service — `describe_series()` returns `(index, name, n_channels)` tuple
 from bdvpg_deconvolution.pipeline import describe_series
 ```
 
+Library users keep control of the process: `run()` and `init_imagej()` never
+terminate it. Only the console-script entry points do (see
+[Nextflow](#nextflow)), via `pipeline.hard_exit()`.
+
 Note that reusing one gateway for many files keeps every opened source
 registered until `run()` cleans them up, which it only does when
 `show_in_bdv=False`. In a long notebook session, re-opening a file whose
@@ -134,6 +140,7 @@ one can be generated with the
 | `--block-size-x/y/z` | 256/256/64 | tiling — lower if you run out of GPU memory |
 | `--overlap-size` | 16 | tile overlap, avoids seams |
 | `--threads` | 10 | CPU-side workers feeding the GPU pool |
+| `--gpu-pool` | (persisted) | GPU workers per device, see [Multi-GPU configuration](#multi-gpu-configuration) |
 | `--output-pixel-type` | keep original | or `Float` |
 | `--compression` | LZW | OME-TIFF compression |
 | `--resolution-levels` | 1 | OME-TIFF pyramid levels |
@@ -242,11 +249,63 @@ is done, which tears down the JVM and any BigDataViewer window with it.
 
 ## Multi-GPU configuration
 
-By default deconvolution runs on a single GPU (device `0`). The device pool is
-configured through ImageJ preferences — a `Pool Configuration` string of the
-form `device_idx:n_workers, device_idx:n_workers`. For example `0:2, 1:4` runs
-2 contexts on GPU 0 and 4 on GPU 1, i.e. **6 GPU workers**. It persists in the
-ImageJ preferences and applies to subsequent runs.
+Deconvolution runs on a pool of CLIJ contexts spread across the available GPUs.
+The pool is described by a string of `device:workers` pairs — `0:2, 1:4` means
+2 contexts on GPU 0 and 4 on GPU 1, i.e. **6 GPU workers**.
+
+### Inspecting the setup
+
+`bdvpg-gpu-pool` reports the devices and the configured pool. With no argument
+it changes nothing, so it is safe to run any time:
+
+```
+$ bdvpg-gpu-pool
+Available OpenCL devices (2):
+  0  NVIDIA RTX PRO 4500 Blackwell
+  1  NVIDIA RTX PRO 2000 Blackwell
+
+Configured pool: 0:4, 1:2
+  device 0  4 workers  NVIDIA RTX PRO 4500 Blackwell
+  device 1  2 workers  NVIDIA RTX PRO 2000 Blackwell
+  total GPU workers: 6
+```
+
+Device indices in a pool spec are the indices in that listing. Enumerating
+devices does not allocate anything; add `--probe` to actually build the pool
+and print its details, which is a real test that the configuration works:
+
+```
+$ bdvpg-gpu-pool --probe
+...
+CLIJxPool [size:6 idle:6]:
+	- [IDLE] NVIDIA RTX PRO 4500 Blackwell
+		- Img Support [true]  OpenCL [v1.2]
+```
+
+### Setting the pool
+
+Either pass a spec to `bdvpg-gpu-pool`, or use `--gpu-pool` on a deconvolution
+run:
+
+```bash
+bdvpg-gpu-pool "0:2, 1:4"                         # set it once
+bdvpg-deconvolve --image raw.czi ... --gpu-pool "0:2, 1:4"   # set it per run
+```
+
+Both do the same thing, and two properties of that thing are worth knowing:
+
+- **The setting is persistent and global.** It is written to the ImageJ
+  preferences (the same key the Fiji *Pool Configuration* dialog uses), so it
+  outlives the process, applies to later runs, and is shared with any other
+  ImageJ tool on the machine. Omitting `--gpu-pool` leaves whatever is already
+  configured in place — it does not reset to a default.
+- **It is read once per JVM.** The pool is a lazy singleton built on first use,
+  so `--gpu-pool` is applied before any GPU work starts. Changing the setting
+  from inside a process that has already built its pool only affects the next
+  process, and `bdvpg-gpu-pool` warns when that happens.
+
+A spec naming a device that does not exist is rejected before anything is
+written, listing the devices that do.
 
 > **Pool workers vs `--threads`.** The pool config sets the number of **GPU-side**
 > workers. `--threads` is the number of **CPU-side** workers feeding that pool
@@ -272,6 +331,16 @@ process deconvolve {
 ```
 
 One JVM boots per invocation, so one-image-per-task is the right granularity.
+
+> **The CLI terminates the process itself.** ImageJ starts AWT even headless,
+> leaving non-daemon threads (`AWT-EventQueue-0`, `AWT-Shutdown`) that keep the
+> JVM alive after the work is done — the command would otherwise write its
+> OME-TIFF and then hang forever, holding a Nextflow slot with nothing left to
+> do. `scyjava.shutdown_jvm()` clears this only some of the time, so the entry
+> points end with `os._exit` instead. Exit codes are preserved. The consequence
+> is that JVM shutdown hooks do not run, so anything that must reach disk is
+> flushed explicitly — which is why setting the GPU pool also saves the ImageJ
+> preferences rather than trusting them to be written at exit.
 For reproducible runs, containerise with the OpenCL runtime, a pre-warmed cjdk
 cache, and a pre-resolved `.jgo` env so tasks don't each re-download.
 
@@ -302,13 +371,17 @@ config.set_java_constraints(fetch="always", vendor="zulu", version="21")
 
 The pipeline is a faithful transcription of a production Fiji/Groovy workflow,
 and the interop layer is verified (`bdvpg-smoke-test` passes: JVM boots, all Java
-classes and the `SourceService` resolve). A full GPU run has **not** been
-exercised end-to-end here — validate against a known dataset first.
+classes, the `SourceService` tree and the GPU enumeration resolve). A full GPU
+run has **not** been exercised end-to-end here — validate against a known
+dataset first.
+
+The multi-series selection has not been exercised against a real multi-series
+file either: if the source tree layout is not the expected
+`dataset > ImageName > series`, the code falls back to treating the file as a
+single series, which would look like a file with one image.
 
 Not yet implemented:
 
-- `--check-gpu` — enumerate OpenCL devices and fail early with a readable
-  message instead of a CLIJ stack trace mid-run.
 - `--prefetch` — warm the JDK/Maven/jgo caches ahead of first use.
 
 ## Development

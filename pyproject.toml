@@ -40,6 +40,7 @@ Issues = "https://github.com/unige-biochem/bdv-playground-deconvolution/issues"
 
 [project.scripts]
 bdvpg-deconvolve = "bdvpg_deconvolution.cli:main"
+bdvpg-gpu-pool = "bdvpg_deconvolution.gpu:main"
 bdvpg-smoke-test = "bdvpg_deconvolution.smoke_test:main"
 
 [build-system]

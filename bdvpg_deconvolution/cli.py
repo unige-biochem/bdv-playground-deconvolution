@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .pipeline import DeconvolveParams, init_imagej, run
+from .pipeline import DeconvolveParams, entry_point, init_imagej, run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,6 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
                    type=float, default=0.0)
     p.add_argument("--threads", dest="n_threads", type=int, default=10,
                    help="CPU-side workers feeding the GPU pool")
+    p.add_argument("--gpu-pool", default=None,
+                   help="GPU pool as 'device:workers' pairs, e.g. '0:2, 1:4' "
+                        "for 2 workers on GPU 0 and 4 on GPU 1. Persists in "
+                        "the ImageJ preferences, so it also applies to later "
+                        "runs; omit to use whatever is already configured. "
+                        "Run 'bdvpg-gpu-pool' to inspect the setup.")
     p.add_argument("--compression", default="LZW",
                    choices=["LZW", "Uncompressed", "JPEG-2000",
                             "JPEG-2000 Lossy", "JPEG"])
@@ -88,7 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv=None) -> int:
+def main(argv=None) -> None:
+    """Console-script entry point. Terminates the process; never returns."""
+    entry_point(_main, argv)
+
+
+def _main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
     ij = init_imagej(mode=args.mode, max_heap=args.max_heap)
@@ -112,6 +123,7 @@ def main(argv=None) -> int:
         compression=args.compression,
         n_resolution_levels=args.n_resolution_levels,
         overwrite=args.overwrite,
+        gpu_pool=args.gpu_pool,
         series=args.series,
         series_naming=args.series_naming,
         range_channels=args.range_channels,
@@ -129,4 +141,4 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

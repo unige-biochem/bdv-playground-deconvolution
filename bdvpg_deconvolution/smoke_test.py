@@ -2,7 +2,7 @@
 service the pipeline needs. Does NOT run a deconvolution (no GPU/data needed)."""
 import scyjava
 
-from .pipeline import init_imagej, _source_service, _jclass
+from .pipeline import init_imagej, entry_point, _source_service, _jclass
 
 CLASSES = [
     "java.io.File",
@@ -16,10 +16,22 @@ CLASSES = [
     "sc.fiji.bdvpg.service.SourceServices",
     "sc.fiji.bdvpg.scijava.service.tree.SourceTree",
     "sc.fiji.bdvpg.scijava.service.tree.FilterNode",
+    "net.haesleinhuepf.clij.CLIJ",
+    "net.haesleinhuepf.clijx.parallel.CLIJPoolOptions",
+    "net.haesleinhuepf.clijx.parallel.CLIJxPool",
 ]
 
 
-def main() -> int:
+def main() -> None:
+    """Console-script entry point. Terminates the process; never returns.
+
+    That the process exits at all is part of what this smoke-tests: without
+    the hard exit it hangs here forever with the work already done.
+    """
+    entry_point(_main)
+
+
+def _main() -> int:
     ij = init_imagej(mode="headless")
 
     for c in CLASSES:
@@ -35,6 +47,13 @@ def main() -> int:
     root = svc.tree().root()
     print("tree root (headless):", root, "children:", root.childCount())
 
+    # GPU setup: enumerating devices does not allocate any context, so this is
+    # safe to run anywhere -- it just reports what the pool would use.
+    from .gpu import describe_gpu_setup
+    print()
+    print(describe_gpu_setup())
+    print()
+
     # typed-array helper
     SAC = _jclass("bdv.viewer.SourceAndConverter")
     arr = scyjava.jarray(SAC, 0)
@@ -45,4 +64,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

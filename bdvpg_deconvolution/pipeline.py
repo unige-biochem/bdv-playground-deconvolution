@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import os
 import re
+import sys
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -73,6 +75,47 @@ def init_imagej(
     _ij = imagej.init(endpoints or DEFAULT_ENDPOINTS, mode=mode)
     print(f"ImageJ2 {_ij.getVersion()} started (mode={mode})")
     return _ij
+
+
+def hard_exit(code: int = 0) -> None:
+    """Terminate the process immediately, JVM threads and all. Never returns.
+
+    ImageJ initialises AWT even under ``mode="headless"``, leaving the
+    non-daemon threads ``AWT-EventQueue-0`` (parked on an empty event queue)
+    and ``AWT-Shutdown`` behind. Non-daemon threads keep the JVM alive, so a
+    command-line process finishes its work, prints its results, and then hangs
+    forever instead of exiting -- fatal for batch use, where the task would
+    hold its slot indefinitely with the output already written.
+
+    ``scyjava.shutdown_jvm()`` sometimes clears this and sometimes does not,
+    and it can itself block, so entry points do not depend on it. ``os._exit``
+    bypasses interpreter shutdown entirely and cannot be blocked by a thread.
+
+    Because this skips JVM shutdown hooks, anything that must reach disk has
+    to be flushed explicitly beforehand -- see
+    :func:`bdvpg_deconvolution.gpu.set_pool`, which saves the ImageJ
+    preferences rather than trusting them to be written at exit.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
+def entry_point(fn, *args, **kwargs) -> None:
+    """Run a CLI ``main`` and terminate the process. Never returns.
+
+    The hard exit has to happen inside ``main`` itself: a console-script
+    wrapper that returns normally would hang in exactly the way
+    :func:`hard_exit` exists to prevent.
+    """
+    try:
+        code = fn(*args, **kwargs)
+    except SystemExit as exc:
+        code = exc.code
+    except BaseException:
+        traceback.print_exc()
+        code = 1
+    hard_exit(code if isinstance(code, int) else 0)
 
 
 # --- Java interop helpers ----------------------------------------------------
@@ -204,6 +247,9 @@ class DeconvolveParams:
     # single-series files; multi-series files require an explicit index.
     series: Optional[int] = None
     series_naming: str = "name"  # name | index -- suffix for multi-series output
+    # CLIJ GPU pool, e.g. "0:2, 1:4". None leaves the persisted ImageJ
+    # preference untouched. See bdvpg_deconvolution.gpu.
+    gpu_pool: Optional[str] = None
     # Export sub-range selection (Kheops IntRangeParser syntax, "" = everything).
     # Applied at export time, on the deconvolved sources -- blocks outside the
     # selection are never computed, so a narrow range is genuinely cheaper.
@@ -218,6 +264,15 @@ def run(params: DeconvolveParams, ij=None):
     """Run the deconvolution pipeline. Returns the output OME-TIFF path or None."""
     if ij is None:
         ij = init_imagej()
+
+    # Must happen before anything touches the GPU: the pool is a lazy
+    # singleton, built from this preference on first use.
+    if params.gpu_pool is not None:
+        from .gpu import format_pool_spec, set_pool  # avoids a circular import
+
+        devices, workers = set_pool(params.gpu_pool)
+        print(f"GPU pool: {format_pool_spec(devices, workers)} "
+              f"({sum(workers)} GPU worker(s))")
 
     cs = ij.command()
     source_service = _source_service(ij)
