@@ -55,6 +55,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--resolution-levels", dest="n_resolution_levels",
                    type=int, default=1)
 
+    # Export sub-range selection. Zero-based, inclusive bounds; comma-separated
+    # blocks; "start:end" or "start:step:end"; negative indices and the "end"
+    # keyword count from the last element. Blank means everything.
+    range_help = ("%s to export, zero-based, e.g. '0,2' or '0:3' or '0:2:end'. "
+                  "Blank (default) exports all.")
+    p.add_argument("--range-channels", default="",
+                   help=range_help % "Channels")
+    p.add_argument("--range-slices", default="",
+                   help=range_help % "Z slices")
+    p.add_argument("--range-frames", default="",
+                   help=range_help % "Timepoints")
+
     # JVM / ImageJ
     p.add_argument("--mode", default="headless",
                    choices=["headless", "interactive"],
@@ -90,6 +102,9 @@ def main(argv=None) -> int:
         compression=args.compression,
         n_resolution_levels=args.n_resolution_levels,
         overwrite=args.overwrite,
+        range_channels=args.range_channels,
+        range_slices=args.range_slices,
+        range_frames=args.range_frames,
     )
 
     try:

@@ -124,10 +124,45 @@ one can be generated with the
 | `--output-pixel-type` | keep original | or `Float` |
 | `--compression` | LZW | OME-TIFF compression |
 | `--resolution-levels` | 1 | OME-TIFF pyramid levels |
+| `--range-channels` | all | subset of channels to export, see [Selecting a sub-range](#selecting-a-sub-range) |
+| `--range-slices` | all | subset of Z slices to export |
+| `--range-frames` | all | subset of timepoints to export |
 | `--unit` | MICROMETER | coordinate unit |
 | `--overwrite` | off | refuse to clobber existing output unless set |
 | `--mode` | headless | escape hatch if a command misbehaves headless |
 | `--max-heap` | — | JVM heap, e.g. `32g` |
+
+### Selecting a sub-range
+
+`--range-channels`, `--range-slices` and `--range-frames` restrict what gets
+written to the OME-TIFF. Because the deconvolution is lazy, blocks outside the
+selection are never computed — a narrow range is genuinely cheaper, which makes
+these flags the natural way to test parameters on one channel or a few slices
+before committing to a full run:
+
+```bash
+bdvpg-deconvolve --image raw.czi --psf psf.tif --out ./test \
+  --range-channels 0 --range-slices 20:30 --iterations 40
+```
+
+The syntax is [Kheops' `IntRangeParser`](https://github.com/BIOP/ijp-kheops/blob/master/src/main/java/ch/epfl/biop/kheops/IntRangeParser.java):
+
+| Expression | Selects |
+|------------|---------|
+| *(blank)* | everything — the default |
+| `2` | index 2 only |
+| `0,2,5` | indices 0, 2 and 5 |
+| `0:4` | 0, 1, 2, 3, 4 — **both bounds inclusive** |
+| `0:2:8` | 0, 2, 4, 6, 8 — `start:step:end` |
+| `-1` | the last index |
+| `0:end` | everything, written out |
+| `end:-1:0` | every index, reversed |
+| `0:3,end` | blocks combine — 0, 1, 2, 3 and the last one |
+
+Indices are **zero-based**, `end` is the last valid index, and negative values
+count backwards from the end. Ranges are selections only — there is no syntax
+for *removing* indices. An out-of-bounds index is an error, so `0:end` is the
+safe way to say "all of them" when you are also composing other blocks.
 
 The CLI is **save-only** by design — it deconvolves and writes an OME-TIFF.
 Viewing results is the notebook's job: a CLI process exits as soon as the work

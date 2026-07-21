@@ -131,6 +131,12 @@ class DeconvolveParams:
     compression: str = "LZW"  # LZW | Uncompressed | JPEG-2000 | JPEG-2000 Lossy | JPEG
     n_resolution_levels: int = 1
     overwrite: bool = False
+    # Export sub-range selection (Kheops IntRangeParser syntax, "" = everything).
+    # Applied at export time, on the deconvolved sources -- blocks outside the
+    # selection are never computed, so a narrow range is genuinely cheaper.
+    range_channels: str = ""
+    range_slices: str = ""
+    range_frames: str = ""
 
 
 # --- The pipeline ------------------------------------------------------------
@@ -271,9 +277,9 @@ def run(params: DeconvolveParams, ij=None):
             KheopsExportSourcesCommand, True,
             {
                 "sacs": deconvolved,
-                "range_channels": "",
-                "range_slices": "",
-                "range_frames": "",
+                "range_channels": params.range_channels,
+                "range_slices": params.range_slices,
+                "range_frames": params.range_frames,
                 "file": output_file,
                 "unit": export_unit,
                 "override_voxel_size": False,
