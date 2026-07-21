@@ -29,9 +29,14 @@ helps most:
 ## Install
 
 ```bash
-uv sync                      # core
-uv sync --extra notebook     # + JupyterLab
+pip install bdv-playground-deconvolution                 # core
+pip install "bdv-playground-deconvolution[notebook]"     # + JupyterLab
 ```
+
+Works in any Python ≥3.10 environment — venv, conda, or `uv pip`. This puts
+`bdvpg-deconvolve` and `bdvpg-smoke-test` on your PATH; call them directly, no
+`uv run` prefix. (If you are working from a clone instead, see
+[Development](#development).)
 
 **No conda required, and you do not need to install Java or Maven yourself.**
 `scyjava`/`jgo` provision both automatically via
@@ -48,7 +53,7 @@ installed — that part is not pip-installable.
 Verify your setup without a GPU or any data:
 
 ```bash
-uv run python smoke_test.py    # boots the JVM, resolves every Java class used
+bdvpg-smoke-test    # boots the JVM, resolves every Java class used
 ```
 
 ## Quick start (CLI)
@@ -56,7 +61,7 @@ uv run python smoke_test.py    # boots the JVM, resolves every Java class used
 Headless and save-only — the intended batch / pipeline interface:
 
 ```bash
-uv run bdvpg-deconvolve \
+bdvpg-deconvolve \
   --image  /path/to/image.czi \
   --psf    /path/to/psf.tif \
   --out    /path/to/output_folder \
@@ -69,12 +74,15 @@ Writes `<image>.ome.tiff` to the output folder, preserving channel order.
 
 ## Notebook
 
+The notebook is not shipped in the wheel — grab it from the repo:
+
 ```bash
-uv run jupyter lab
+curl -LO https://raw.githubusercontent.com/unige-biochem/bdv-playground-deconvolution/main/notebooks/Deconvolve.ipynb
+jupyter lab
 ```
 
-Open [`notebooks/Deconvolve.ipynb`](notebooks/Deconvolve.ipynb) for interactive
-parameter tuning and viewing raw + deconvolved side by side in BigDataViewer.
+[`notebooks/Deconvolve.ipynb`](notebooks/Deconvolve.ipynb) does interactive
+parameter tuning and views raw + deconvolved side by side in BigDataViewer.
 Use `mode="interactive"` (needs a display).
 
 ## Library
@@ -186,7 +194,7 @@ config.set_java_constraints(fetch="always", vendor="zulu", version="21")
 ## Status
 
 The pipeline is a faithful transcription of a production Fiji/Groovy workflow,
-and the interop layer is verified (`smoke_test.py` passes: JVM boots, all Java
+and the interop layer is verified (`bdvpg-smoke-test` passes: JVM boots, all Java
 classes and the `SourceService` resolve). A full GPU run has **not** been
 exercised end-to-end here — validate against a known dataset first.
 
@@ -195,6 +203,22 @@ Not yet implemented:
 - `--check-gpu` — enumerate OpenCL devices and fail early with a readable
   message instead of a CLIJ stack trace mid-run.
 - `--prefetch` — warm the JDK/Maven/jgo caches ahead of first use.
+
+## Development
+
+From a clone, `uv` manages the environment and `uv.lock` pins it:
+
+```bash
+git clone https://github.com/unige-biochem/bdv-playground-deconvolution
+cd bdv-playground-deconvolution
+uv sync                      # core
+uv sync --extra notebook     # + JupyterLab
+uv run bdvpg-smoke-test      # verify the Java interop
+```
+
+> `uv run` uses the project's own `.venv` and **ignores an activated conda
+> environment**. Either use `uv run` from the clone, or `pip install` into your
+> conda env and call the commands directly — don't mix the two.
 
 ## Credits
 
