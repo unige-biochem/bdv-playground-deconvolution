@@ -3,7 +3,7 @@ name = "bdv-playground-deconvolution"
 # Versioning: the first three components track the bigdataviewer-biop-tools
 # Java release pinned in pipeline.py (DEFAULT_ENDPOINTS); the fourth is the
 # wrapper revision, bumped for Python-side changes against the same Java release.
-version = "0.21.0.1"
+version = "0.21.0.2"
 description = "Tiled, lazy, multi-GPU Richardson-Lucy deconvolution for large 5D microscopy images"
 readme = "readme.md"
 requires-python = ">=3.10"
