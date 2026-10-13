@@ -34,6 +34,12 @@ def main() -> None:
 def _main() -> int:
     ij = init_imagej(mode="headless")
 
+    # Should be the cjdk-provisioned JAVA_VERSION, never a system Java.
+    System = _jclass("java.lang.System")
+    print(f"Java {System.getProperty('java.version')} "
+          f"({System.getProperty('java.vendor')}) at "
+          f"{System.getProperty('java.home')}")
+
     for c in CLASSES:
         _jclass(c)
         print("OK", c)

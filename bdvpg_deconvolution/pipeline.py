@@ -37,6 +37,15 @@ DEFAULT_ENDPOINTS = [
     "ch.epfl.biop:quick-start-czi-reader:0.3.0"
 ]
 
+# --- Java runtime ------------------------------------------------------------
+# The JVM is pinned too, and always provisioned through cjdk. scyjava's "auto"
+# mode would instead pick up whatever Java JAVA_HOME or PATH points to (an
+# IDE's bundled runtime, an old system JDK, ...), so the same install would
+# behave differently from one machine to the next -- or fail on class files
+# compiled for a newer Java than the one found.
+JAVA_VENDOR = "zulu-jre"
+JAVA_VERSION = "21"
+
 # Module-level singleton: a JVM can only be started once per process.
 _ij = None
 
@@ -62,11 +71,19 @@ def init_imagej(
         Convenience for the JVM ``-Xmx`` option, e.g. ``"32g"``.
     jvm_options
         Extra raw JVM flags, e.g. ``["-Dfoo=bar"]``.
+
+    The JVM is fetched from cjdk as :data:`JAVA_VENDOR` / :data:`JAVA_VERSION`,
+    ignoring any system Java. This overrides earlier
+    ``scyjava.config.set_java_constraints`` calls; to change it, set those two
+    constants first.
     """
     global _ij
     if _ij is not None:
         return _ij
 
+    scyjava.config.set_java_constraints(
+        fetch="always", vendor=JAVA_VENDOR, version=JAVA_VERSION
+    )
     if max_heap:
         scyjava.config.add_option(f"-Xmx{max_heap}")
     for opt in jvm_options or []:

@@ -48,7 +48,7 @@ The only real prerequisite is an **OpenCL-capable GPU** with vendor drivers
 installed — that part is not pip-installable.
 
 > **First run is heavy.** Installing is a few MB, but the first *run* downloads
-> a JDK (~190 MB), Maven, and the ImageJ2/BIOP Maven tree — several hundred MB,
+> a Java 21 runtime, Maven, and the ImageJ2/BIOP Maven tree — several hundred MB,
 > once, then cached. It needs `maven.scijava.org` reachable.
 
 Verify your setup without a GPU or any data:
@@ -359,13 +359,12 @@ DEFAULT_ENDPOINTS = [
 
 Bump those and cut a release when you want to move the Java side.
 
-The JVM itself is *not* pinned by default — cjdk prefers a suitable system JDK
-and downloads one otherwise. To pin it, before the first `init_imagej()`:
-
-```python
-from scyjava import config
-config.set_java_constraints(fetch="always", vendor="zulu", version="21")
-```
+The JVM is pinned as well: `init_imagej()` always runs on a cjdk-provisioned
+Zulu JRE 21 (`JAVA_VENDOR` / `JAVA_VERSION` in the same file), and never on a
+system Java, even if `JAVA_HOME` or `PATH` point to one. A system Java
+would make the runtime depend on whatever happens to be installed (an IDE's
+bundled JBR, an old JDK 11, ...). `bdvpg-smoke-test` prints the Java actually
+in use.
 
 ## Status
 
