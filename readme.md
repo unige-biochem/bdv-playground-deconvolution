@@ -264,13 +264,14 @@ The syntax is [Kheops' `IntRangeParser`](https://github.com/BIOP/ijp-kheops/blob
 | `0:4` | 0, 1, 2, 3, 4 — **both bounds inclusive** |
 | `0:2:8` | 0, 2, 4, 6, 8 — `start:step:end` |
 | `-1` | the last index |
-| `0:end` | everything, written out |
-| `end:-1:0` | every index, reversed |
-| `0:3,end` | blocks combine — 0, 1, 2, 3 and the last one |
+| `0:-1` | everything, written out |
+| `-1:-1:0` | every index, reversed |
+| `0:3,-1` | blocks combine — 0, 1, 2, 3 and the last one |
 
-Indices are **zero-based**, `end` is the last valid index, and negative values
-count backwards from the end. Ranges are selections only — there is no syntax
-for *removing* indices. An out-of-bounds index is an error, so `0:end` is the
+Indices are **zero-based**, and negative values count backwards from the end
+(`-1` is the last valid index). Despite what the parser's own documentation
+says, there is no `end` keyword: Kheops rejects it. Ranges are selections only — there is no syntax
+for *removing* indices. An out-of-bounds index is an error, so `0:-1` is the
 safe way to say "all of them" when you are also composing other blocks.
 
 The CLI is **save-only** by design — it deconvolves and writes an OME-TIFF.

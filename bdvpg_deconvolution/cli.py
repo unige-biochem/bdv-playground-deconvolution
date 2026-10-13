@@ -76,9 +76,9 @@ def build_parser() -> argparse.ArgumentParser:
                    type=int, default=1)
 
     # Export sub-range selection. Zero-based, inclusive bounds; comma-separated
-    # blocks; "start:end" or "start:step:end"; negative indices and the "end"
-    # keyword count from the last element. Blank means everything.
-    range_help = ("%s to export, zero-based, e.g. '0,2' or '0:3' or '0:2:end'. "
+    # blocks; "start:end" or "start:step:end"; negative indices count from the
+    # last element (there is no "end" keyword). Blank means everything.
+    range_help = ("%s to export, zero-based, e.g. '0,2' or '0:3' or '0:2:-1'. "
                   "Blank (default) exports all.")
     p.add_argument("--range-channels", default="",
                    help=range_help % "Channels")

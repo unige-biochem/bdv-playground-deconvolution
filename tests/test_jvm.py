@@ -94,12 +94,21 @@ def test_ome_tif_input_names_output_without_double_ome(ij, data, tmp_path):
     ("2,0", 3, [2, 0]),
     ("0:-1", 2, [0, 1]),
     ("0:2:4", 5, [0, 2, 4]),
+    # The examples of the readme's range table.
+    ("2", 6, [2]),
+    ("0,2,5", 6, [0, 2, 5]),
+    ("0:4", 6, [0, 1, 2, 3, 4]),
+    ("0:2:8", 9, [0, 2, 4, 6, 8]),
+    ("-1", 6, [5]),
+    ("-1:-1:0", 4, [3, 2, 1, 0]),
+    ("0:3,-1", 6, [0, 1, 2, 3, 5]),
 ])
 def test_select_channels(ij, expression, n, expected):
     assert _select_channels(expression, n) == expected
 
 
-@pytest.mark.parametrize("expression", ["2", "0:5", "a", "0:2:end"])
+# No "end" keyword, despite what IntRangeParser's own documentation says.
+@pytest.mark.parametrize("expression", ["2", "0:5", "a", "end", "0:end", "0:2:end"])
 def test_select_channels_refuses(ij, expression):
     with pytest.raises(ValueError, match="does not apply to 2 channel"):
         _select_channels(expression, 2)

@@ -143,7 +143,7 @@ def test_cli_maps_every_option(fake_pipeline):
         "--resolution-levels", "3",
         "--range-channels", "0,2",
         "--range-slices", "0:9",
-        "--range-frames", "end",
+        "--range-frames", "-1",
         "--mode", "interactive",
         "--max-heap", "8g",
     ]
@@ -172,7 +172,7 @@ def test_cli_maps_every_option(fake_pipeline):
         gpu_pool="0:2, 1:4",
         range_channels="0,2",
         range_slices="0:9",
-        range_frames="end",
+        range_frames="-1",
     )
     assert fake_pipeline["init"] == {"mode": "interactive", "max_heap": "8g"}
 
