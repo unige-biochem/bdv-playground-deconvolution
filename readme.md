@@ -352,8 +352,9 @@ is pinned by the coordinates in
 
 ```python
 DEFAULT_ENDPOINTS = [
-    "net.imagej:imagej:2.16.0",
-    "ch.epfl.biop:bigdataviewer-biop-tools:0.21.0",
+    "net.imagej:imagej:2.18.0",
+    "ch.epfl.biop:bigdataviewer-biop-tools:0.24.1",
+    "ch.epfl.biop:quick-start-czi-reader:0.3.0",
 ]
 ```
 

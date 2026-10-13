@@ -28,13 +28,13 @@ import imagej
 import scyjava
 
 # --- Java dependencies -------------------------------------------------------
-# These two endpoints pull in everything transitively (BigDataViewer-Playground,
+# These endpoints pull in everything transitively (BigDataViewer-Playground,
 # Bio-Formats, Kheops, the BIOP deconvolve command and CLIJ2). Pin them for
 # reproducibility. Override via init_imagej(endpoints=[...]) if needed.
 DEFAULT_ENDPOINTS = [
-    "net.imagej:imagej:2.16.0",
-    "ch.epfl.biop:bigdataviewer-biop-tools:0.21.0",
-    "ch.epfl.biop:quick-start-czi-reader:0.3.0"
+    "net.imagej:imagej:2.18.0",
+    "ch.epfl.biop:bigdataviewer-biop-tools:0.24.1",
+    "ch.epfl.biop:quick-start-czi-reader:0.3.0",
 ]
 
 # --- Java runtime ------------------------------------------------------------
@@ -464,7 +464,7 @@ def run(params: DeconvolveParams, ij=None):
         cs.run(
             KheopsExportSourcesCommand, True,
             {
-                "sacs": deconvolved,
+                "sources": deconvolved,
                 "range_channels": params.range_channels,
                 "range_slices": params.range_slices,
                 "range_frames": params.range_frames,
@@ -477,7 +477,6 @@ def run(params: DeconvolveParams, ij=None):
                 "tile_size_y": 256,
                 "n_threads": params.n_threads,
                 "compression": params.compression,
-                "compress_temp_files": False,
                 "vox_size_xy_um": 0.0,
                 "vox_size_z_um": 0.0,
             },
