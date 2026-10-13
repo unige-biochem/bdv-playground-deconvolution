@@ -93,11 +93,7 @@ def _write_ome(path, series):
 
 @pytest.fixture(scope="session")
 def data(tmp_path_factory):
-    """PSF, a 2-channel single-series image, and a 2-series image.
-
-    Files are plain ``.tif``: an ``.ome.tif`` input would produce
-    ``<name>.ome.ome.tiff``, since only the last extension is stripped.
-    """
+    """PSF, a 2-channel single-series image, and a 2-series image."""
     import tifffile
 
     root = tmp_path_factory.mktemp("data")

@@ -211,6 +211,19 @@ def _source_service(ij):
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
+def _base_name(file) -> str:
+    """File name without its extension, a two-part OME one included.
+
+    ``"cells.ome.tif"`` becomes ``"cells"``, not ``"cells.ome"`` -- which would
+    otherwise end up in the output as ``cells.ome.ome.tiff``. Any ``.ome.*``
+    (``.ome.tiff``, ``.ome.btf``, ``.ome.zarr``, ...) is handled the same way.
+    """
+    stem = Path(file).stem
+    if stem.lower().endswith(".ome"):
+        stem = stem[:-len(".ome")]
+    return stem
+
+
 def _sanitize_filename(name: str) -> str:
     """Turn a series name into a filename fragment.
 
@@ -322,7 +335,6 @@ def run(params: DeconvolveParams, ij=None):
 
     Float = _jclass("java.lang.Float")
     File = _jclass("java.io.File")
-    FilenameUtils = _jclass("org.apache.commons.io.FilenameUtils")
 
     DatasetFromBioFormatsCreateCommand = _jclass(
         "ch.epfl.biop.bdv.img.bioformats.command.DatasetFromBioFormatsCreateCommand"
@@ -337,8 +349,8 @@ def run(params: DeconvolveParams, ij=None):
     # ---- 0. Resolve and validate the output file ---------------------------
     image_file = Path(params.image_file).resolve()
     psf_file = Path(params.psf_file).resolve()
-    image_name = FilenameUtils.removeExtension(image_file.name)
-    psf_name = FilenameUtils.removeExtension(psf_file.name)
+    image_name = _base_name(image_file)
+    psf_name = _base_name(psf_file)
 
     if not params.show_in_bdv and not params.save_output:
         raise ValueError(

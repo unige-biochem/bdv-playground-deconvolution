@@ -7,7 +7,6 @@ from .pipeline import init_imagej, entry_point, _source_service, _jclass
 CLASSES = [
     "java.io.File",
     "java.lang.Float",
-    "org.apache.commons.io.FilenameUtils",
     "bdv.viewer.SourceAndConverter",
     "ch.epfl.biop.bdv.img.bioformats.command.DatasetFromBioFormatsCreateCommand",
     "ch.epfl.biop.command.process.deconvolve.SourcesDeconvolveCommand",

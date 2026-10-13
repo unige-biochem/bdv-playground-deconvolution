@@ -73,6 +73,18 @@ def test_existing_output_is_kept_without_overwrite(ij, data, tmp_path):
     assert existing.read_bytes() == b"previous result"
 
 
+def test_ome_tif_input_names_output_without_double_ome(ij, data, tmp_path):
+    image = tmp_path / "cells.ome.tif"
+    image.write_bytes(data["single"].read_bytes())
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "cells.ome.tiff").write_bytes(b"previous result")
+    # Refusing to overwrite proves the name it would have written to.
+    with pytest.raises(FileExistsError, match=r"cells\.ome\.tiff"):
+        run(DeconvolveParams(image_file=str(image), psf_file=str(data["psf"]),
+                             output_folder=str(out)), ij=ij)
+
+
 @pytest.mark.parametrize("kwargs, message", [
     ({"save_output": False, "show_in_bdv": False}, "Nothing to do"),
     ({"output_folder": None}, "No output folder"),

@@ -8,6 +8,7 @@ import scyjava
 from bdvpg_deconvolution import cli, gpu, pipeline
 from bdvpg_deconvolution.pipeline import (
     DeconvolveParams,
+    _base_name,
     _format_series_listing,
     _sanitize_filename,
 )
@@ -27,6 +28,23 @@ from bdvpg_deconvolution.pipeline import (
 ])
 def test_sanitize_filename(name, expected):
     assert _sanitize_filename(name) == expected
+
+
+@pytest.mark.parametrize("file, expected", [
+    ("cells.tif", "cells"),
+    ("cells.czi", "cells"),
+    ("cells.ome.tif", "cells"),
+    ("cells.ome.tiff", "cells"),
+    ("cells.OME.TIF", "cells"),
+    ("cells.ome.btf", "cells"),
+    ("cells.ome.zarr", "cells"),
+    ("/data/run1/cells.ome.tif", "cells"),
+    ("run.1.ome.tif", "run.1"),
+    ("home.tif", "home"),
+    ("cells", "cells"),
+])
+def test_base_name(file, expected):
+    assert _base_name(file) == expected
 
 
 def test_series_listing_names_file_and_channels():
