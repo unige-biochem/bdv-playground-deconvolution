@@ -151,6 +151,11 @@ notebook = [
     { name = "jupyterlab" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "jupyterlab", marker = "extra == 'notebook'", specifier = ">=4.0" },
@@ -158,6 +163,9 @@ requires-dist = [
     { name = "scyjava", specifier = ">=1.12.0" },
 ]
 provides-extras = ["notebook"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "beautifulsoup4"
@@ -604,6 +612,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/e6/9fa4ff8aab684dd3ae58be7d782155ba72a2584dcf5779785206c1ca2b8a/imglyb-2.1.0.tar.gz", hash = "sha256:9651860278bd4f05d74b47d7ea06df7f24e39cfbfb541208d913fbd01c48c276", size = 18015, upload-time = "2023-03-10T22:01:03.564Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/61/d088cd14e5a56b3fe0be6390d9b06cfb5f5974cd504c5c81126df4853e0f/imglyb-2.1.0-py3-none-any.whl", hash = "sha256:a9630171d869e4d0d1d138552f9c08562c7f7dffa9482d9c25383928a6c8ada7", size = 16767, upload-time = "2023-03-10T22:01:01.88Z" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/e1/2069291243c926a2ff1cd706c7f3eeb9b62144bf60f77c9fb9ff2fb26bd3/iniconfig-2.3.1.tar.gz", hash = "sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960", size = 21209, upload-time = "2026-10-06T22:48:38.076Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl", hash = "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7", size = 7552, upload-time = "2026-10-06T22:48:36.959Z" },
 ]
 
 [[package]]
@@ -1739,6 +1756,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
 name = "progressbar2"
 version = "4.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1854,6 +1880,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/43/6e/d1104e3bb9e5f6108ec1831f3b8857750b7037eff6daec450bc9726ffac6/pyimagej-1.8.0.tar.gz", hash = "sha256:177010bd708a0b20e4bc71847b161a131e514cd4de93d58e9881eb1e680b580d", size = 77133, upload-time = "2026-03-15T19:08:08.742Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/49/d3/b4f41b30fc5a529011b8776e9d764f3c2001b249551b10ea4baa523cb64c/pyimagej-1.8.0-py3-none-any.whl", hash = "sha256:9ca506d2f28f2e6b3acae39021084f68a5cc278460698636ca1b6adddc8fe48b", size = 40209, upload-time = "2026-03-15T19:08:07.503Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]
