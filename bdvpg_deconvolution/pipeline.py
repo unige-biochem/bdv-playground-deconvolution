@@ -164,6 +164,32 @@ def _file_array(paths):
     return arr
 
 
+def _run_command(cs, command, inputs: dict):
+    """Run a SciJava command and return its finished module.
+
+    SciJava matches inputs by name and does not reject a name the command
+    does not declare, so a parameter renamed on the Java side (as Kheops did
+    with ``sacs`` -> ``sources``) would otherwise go unnoticed and leave the
+    real input unset. Undeclared names are refused before running, and a
+    command that ends up canceled (e.g. a required input still missing) raises
+    instead of returning a module without outputs.
+    """
+    name = str(command.class_.getSimpleName())
+    declared = {str(item.getName()) for item in cs.getCommand(command).inputs()}
+    unknown = sorted(set(inputs) - declared)
+    if unknown:
+        raise RuntimeError(
+            f"{name} has no input(s) {unknown} -- did its "
+            f"Java API change? Declared inputs: {sorted(declared)}"
+        )
+    module = cs.run(command, True, inputs).get()
+    if module.isCanceled():
+        raise RuntimeError(
+            f"{name} was canceled: {module.getCancelReason()}"
+        )
+    return module
+
+
 def _source_service(ij):
     """The BDV-Playground SourceService, which turns SpimData into sources."""
     SourceService = _jclass("sc.fiji.bdvpg.scijava.service.SourceService")
@@ -337,8 +363,8 @@ def run(params: DeconvolveParams, ij=None):
 
     def open_sources(file: Path, name: str):
         spimdata = (
-            cs.run(
-                DatasetFromBioFormatsCreateCommand, True,
+            _run_command(
+                cs, DatasetFromBioFormatsCreateCommand,
                 {
                     "datasetname": name,
                     "unit": params.unit,
@@ -349,7 +375,6 @@ def run(params: DeconvolveParams, ij=None):
                     "disable_memo": False,
                 },
             )
-            .get()
             .getOutput("spimdata")
         )
         return source_service.getSourcesFromDataset(spimdata)
@@ -429,8 +454,8 @@ def run(params: DeconvolveParams, ij=None):
 
     # ---- 3. Run the tiled, lazy Richardson-Lucy GPU deconvolution ----------
     deconvolved = (
-        cs.run(
-            SourcesDeconvolveCommand, True,
+        _run_command(
+            cs, SourcesDeconvolveCommand,
             {
                 "sources": _sac_array(image_sources),
                 "psf": psf_source,
@@ -446,7 +471,6 @@ def run(params: DeconvolveParams, ij=None):
                 "n_threads": params.n_threads,
             },
         )
-        .get()
         .getOutput("sources_out")
     )
 
@@ -461,8 +485,8 @@ def run(params: DeconvolveParams, ij=None):
     # ---- 5. Optionally export the deconvolved sources to OME-TIFF ----------
     result_path = None
     if params.save_output:
-        cs.run(
-            KheopsExportSourcesCommand, True,
+        _run_command(
+            cs, KheopsExportSourcesCommand,
             {
                 "sources": deconvolved,
                 "range_channels": params.range_channels,
@@ -480,7 +504,7 @@ def run(params: DeconvolveParams, ij=None):
                 "vox_size_xy_um": 0.0,
                 "vox_size_z_um": 0.0,
             },
-        ).get()
+        )
         result_path = str(output_file)
         print(f"Saved deconvolved OME-TIFF: {output_file}")
     else:
