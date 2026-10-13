@@ -139,7 +139,7 @@ wheels = [
 
 [[package]]
 name = "bdv-playground-deconvolution"
-version = "0.1.0"
+version = "0.21.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "pyimagej" },
