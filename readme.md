@@ -13,7 +13,7 @@ GPU, and nothing is computed until you actually browse or export the result.
 Multiple GPUs (or several contexts on one GPU) can be used in parallel.
 
 All channels and timepoints are processed and written out by default, in the
-original order, using a single PSF.
+original order, using a single PSF or one PSF per channel.
 
 Under the hood it drives [BigDataViewer-Playground](https://bigdataviewer-playground-documentation.readthedocs.io/en/latest/processing_images/deconvolution.html) and [CLIJ2](https://github.com/clij/clij2-fft) through [PyImageJ](https://github.com/imagej/pyimagej). Python is the orchestration layer.
 
@@ -123,7 +123,33 @@ dataset name was already used can leave stale nodes behind.
 
 ## Point Spread Function
 
-One **single-channel PSF** is supplied per image and reused for all channels.
+Each PSF is a **single-channel** image. Give one to use it for every channel,
+or several, one per exported channel:
+
+```bash
+bdvpg-deconvolve --image raw.czi --psf psf_488.tif psf_561.tif --out ./out
+```
+
+PSFs follow the **export order**, i.e. the channels left after
+`--range-channels` (see [Selecting a sub-range](#selecting-a-sub-range)). With
+`--range-channels 2,0`, the first PSF goes to channel 2 and the second to
+channel 0. Each run prints which PSF went to which channel. A file listed
+several times is opened once. From Python, pass a list:
+`psf_file=["psf_488.tif", "psf_561.tif"]`.
+
+When the number of PSFs does not match the number of exported channels, the
+run is refused before anything is computed. For a [multi-series
+file](#multi-series-files) every series is checked when the file is opened,
+and a warning lists the ones that do not fit. This matters in a loop over the
+series: the warning shows up front which ones will be refused, while the
+series that fit are still deconvolved:
+
+```
+WARNING: 2 PSF files were given, one per exported channel (range_channels=''), but 1 of the 2 series of 'multi.czi' do not fit:
+  0  Overview  (1 channel(s) exported)
+These series will be refused; the others can be deconvolved.
+```
+
 If no empirical PSF (e.g. from sub-resolution beads) is available, a theoretical
 one can be generated with the
 [PSF Generator](https://bigwww.epfl.ch/algorithms/psfgenerator/) Fiji plugin.
@@ -209,12 +235,16 @@ Note this pays the JVM startup cost per series. From Python you can instead call
 `run()` repeatedly against a single `init_imagej()` gateway.
 
 The PSF is treated differently on purpose: its first source is always used, as
-before, so a multi-series PSF is not an error.
+before, so a multi-series PSF is not an error. With one PSF per channel, series
+whose channel count does not match are listed in a warning — see [Point Spread
+Function](#point-spread-function).
 
 ### Selecting a sub-range
 
 `--range-channels`, `--range-slices` and `--range-frames` restrict what gets
-written to the OME-TIFF. Because the deconvolution is lazy, blocks outside the
+written to the OME-TIFF. Channels are selected before the deconvolution, so
+that each one can be paired with [its own PSF](#point-spread-function); in a
+notebook, only the selected channels are shown deconvolved. Because the deconvolution is lazy, blocks outside the
 selection are never computed — a narrow range is genuinely cheaper, which makes
 these flags the natural way to test parameters on one channel or a few slices
 before committing to a full run:
@@ -319,7 +349,7 @@ The CLI is the intended Nextflow interface — one image per task, headless:
 ```groovy
 process deconvolve {
     input:
-      tuple val(sample), path(image), path(psf)
+      tuple val(sample), path(image), path(psf)  // one file, or one per channel
     output:
       path "${image.baseName}.ome.tiff"
     script:
@@ -372,7 +402,7 @@ in use.
 The pipeline is a faithful transcription of a production Fiji/Groovy workflow.
 The [test suite](#tests) runs it end-to-end on the GPU, on small synthetic
 OME-TIFFs (single- and multi-series): output shape, pixel type, file naming,
-sub-ranges and that blurred points get sharper. It has **not** been validated
+sub-ranges, one PSF per channel and that blurred points get sharper. It has **not** been validated
 against real data with a measured PSF — check against a known dataset first.
 
 Multi-series selection is tested on a synthetic OME-TIFF only, not on real

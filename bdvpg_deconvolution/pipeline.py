@@ -263,6 +263,62 @@ def describe_series(source_service, dataset_name: str):
     return [(i, str(n.name()), len(n.sources())) for i, n in enumerate(nodes)]
 
 
+def _psf_files(psf_file) -> list[Path]:
+    """Normalise :attr:`DeconvolveParams.psf_file` to a list of paths."""
+    files = [psf_file] if isinstance(psf_file, (str, os.PathLike)) else list(psf_file)
+    if not files:
+        raise ValueError("No PSF file given.")
+    return [Path(f).resolve() for f in files]
+
+
+def _select_channels(range_channels: str, n_channels: int) -> list[int]:
+    """Indices of the channels ``range_channels`` selects, in export order.
+
+    Parsed by Kheops' own ``IntRangeParser``, so the syntax (reordering and
+    repeats included, e.g. ``"2,0"``) is exactly the one the export accepts.
+    """
+    IntRangeParser = _jclass("ch.epfl.biop.kheops.IntRangeParser")
+    try:
+        return [int(i) for i in IntRangeParser(range_channels).get(n_channels)]
+    except Exception as exc:  # a Java exception, raised through JPype
+        message = exc.getMessage() if hasattr(exc, "getMessage") else exc
+        raise ValueError(
+            f"range_channels={range_channels!r} does not apply to "
+            f"{n_channels} channel(s): {message}"
+        ) from None
+
+
+def _warn_psf_misfit(image_file, series, range_channels: str, n_psfs: int):
+    """Warn about every series whose exported channels do not match the PSFs.
+
+    Only one series is deconvolved per run, but a run is usually one of a loop
+    over all of them: listing the misfits up front tells which iterations will
+    be refused before any of them is reached.
+    """
+    misfits = []
+    for i, name, n in series:
+        try:
+            exported = len(_select_channels(range_channels, n))
+        except ValueError as exc:
+            misfits.append((i, name, str(exc)))
+            continue
+        if exported != n_psfs:
+            misfits.append((i, name, f"{exported} channel(s) exported"))
+    if not misfits:
+        return
+    width = max(len(name) for _, name, _ in misfits)
+    lines = [f"  {i}  {name:<{width}}  ({why})" for i, name, why in misfits]
+    sys.stdout.flush()  # keep the warning in place when both go to one log
+    print(
+        f"WARNING: {n_psfs} PSF files were given, one per exported channel "
+        f"(range_channels={range_channels!r}), but {len(misfits)} of the "
+        f"{len(series)} series of '{Path(image_file).name}' do not fit:\n"
+        + "\n".join(lines)
+        + "\nThese series will be refused; the others can be deconvolved.",
+        file=sys.stderr, flush=True,
+    )
+
+
 def _format_series_listing(image_file, series) -> str:
     width = max(len(name) for _, name, _ in series)
     lines = [f"  {i}  {name:<{width}}  ({n} channel{'s' if n != 1 else ''})"
@@ -282,7 +338,10 @@ def _format_series_listing(image_file, series) -> str:
 @dataclass
 class DeconvolveParams:
     image_file: str
-    psf_file: str
+    # One PSF for every channel, or a list with one PSF per exported channel,
+    # in export order (i.e. after range_channels). A list of one is the same
+    # as a single file.
+    psf_file: str | list[str]
     output_folder: Optional[str] = None
     unit: str = "MICROMETER"  # MICROMETER | MILLIMETER | NANOMETER | PIXEL
     output_pixel_type: str = "Keep Pixel Type Of Original Image"  # or "Float"
@@ -306,9 +365,10 @@ class DeconvolveParams:
     # CLIJ GPU pool, e.g. "0:2, 1:4". None leaves the persisted ImageJ
     # preference untouched. See bdvpg_deconvolution.gpu.
     gpu_pool: Optional[str] = None
-    # Export sub-range selection (Kheops IntRangeParser syntax, "" = everything).
-    # Applied at export time, on the deconvolved sources -- blocks outside the
-    # selection are never computed, so a narrow range is genuinely cheaper.
+    # Sub-range selection (Kheops IntRangeParser syntax, "" = everything).
+    # Channels are selected before the deconvolution, so each one can be paired
+    # with its PSF; slices and frames at export time. Either way blocks outside
+    # the selection are never computed, so a narrow range is genuinely cheaper.
     range_channels: str = ""
     range_slices: str = ""
     range_frames: str = ""
@@ -348,9 +408,9 @@ def run(params: DeconvolveParams, ij=None):
 
     # ---- 0. Resolve and validate the output file ---------------------------
     image_file = Path(params.image_file).resolve()
-    psf_file = Path(params.psf_file).resolve()
     image_name = _base_name(image_file)
-    psf_name = _base_name(psf_file)
+    psf_files = _psf_files(params.psf_file)
+    per_channel_psf = len(psf_files) > 1
 
     if not params.show_in_bdv and not params.save_output:
         raise ValueError(
@@ -400,6 +460,11 @@ def run(params: DeconvolveParams, ij=None):
 
     series = describe_series(source_service, image_name)
     series_suffix = ""
+    image_label = f"'{image_file.name}'"
+
+    if per_channel_psf and len(series) > 1:
+        _warn_psf_misfit(image_file, series, params.range_channels,
+                         len(psf_files))
 
     if len(series) > 1:
         if params.series is None:
@@ -415,6 +480,7 @@ def run(params: DeconvolveParams, ij=None):
         series_suffix = ("_" + _sanitize_filename(series_name)
                          if params.series_naming == "name"
                          else f"_{index}")
+        image_label = f"Series {index} '{series_name}' of {image_label}"
         print(f"Opened '{image_name}' series {index} '{series_name}' : "
               f"{len(image_sources)} channel(s) "
               f"({len(series)} series in the file)")
@@ -430,17 +496,37 @@ def run(params: DeconvolveParams, ij=None):
         image_sources = list(all_image_sources)
         print(f"Opened '{image_name}' : {len(image_sources)} channel(s)")
 
-    # ---- 1b. Open the PSF --------------------------------------------------
+    # ---- 1b. Pair each selected channel with its PSF -----------------------
+    channels = _select_channels(params.range_channels, len(image_sources))
+    if per_channel_psf and len(channels) != len(psf_files):
+        raise ValueError(
+            f"{image_label} exports {len(channels)} channel(s) "
+            f"{channels} (range_channels={params.range_channels!r}), but "
+            f"{len(psf_files)} PSF files were given. Give one PSF per "
+            f"exported channel, in export order, or a single PSF for all."
+        )
+    channel_psfs = psf_files if per_channel_psf else psf_files * len(channels)
+
+    # ---- 1c. Open the PSFs -------------------------------------------------
     # A multi-series PSF is unusual; as before, the first source is used.
-    psf_sources = open_sources(psf_file, psf_name)
-    if psf_sources.isEmpty():
-        raise RuntimeError(f"No source found in PSF file: {psf_file}")
+    # A file listed for several channels is opened once.
+    psf_source_of = {}
+    opened_psf_sources = []  # every source of every PSF file, for cleanup
+    for psf_file in dict.fromkeys(channel_psfs):
+        psf_name = _base_name(psf_file)
+        psf_sources = open_sources(psf_file, psf_name)
+        if psf_sources.isEmpty():
+            raise RuntimeError(f"No source found in PSF file: {psf_file}")
+        opened_psf_sources.extend(psf_sources)
+        psf_source_of[psf_file] = psf_sources.get(0)
+        print(f"Opened PSF '{psf_name}' : {psf_sources.size()} source(s), "
+              f"using the first one")
 
-    psf_source = psf_sources.get(0)  # one PSF for all channels
-    print(f"Opened PSF '{psf_name}' : {psf_sources.size()} source(s), "
-          f"using the first one")
+    if per_channel_psf:
+        for c, psf_file in zip(channels, channel_psfs):
+            print(f"  channel {c} <- PSF '{psf_file.name}'")
 
-    # ---- 1c. Resolve and validate the output file --------------------------
+    # ---- 1d. Resolve and validate the output file --------------------------
     output_file = None
     if params.save_output:
         output_file = File(str(Path(params.output_folder).resolve()),
@@ -465,26 +551,44 @@ def run(params: DeconvolveParams, ij=None):
         SourceServices.getBdvDisplayService().show(bdv_raw, _sac_array(image_sources))
 
     # ---- 3. Run the tiled, lazy Richardson-Lucy GPU deconvolution ----------
-    deconvolved = (
-        _run_command(
-            cs, SourcesDeconvolveCommand,
-            {
-                "sources": _sac_array(image_sources),
-                "psf": psf_source,
-                "output_pixel_type": params.output_pixel_type,
-                "suffix": "_deconvolved",
-                "block_size_x": params.block_size_x,
-                "block_size_y": params.block_size_y,
-                "block_size_z": params.block_size_z,
-                "overlap_size": params.overlap_size,
-                "num_iterations": params.num_iterations,
-                "non_circulant": params.non_circulant,
-                "regularization_factor": Float(float(params.regularization_factor)),
-                "n_threads": params.n_threads,
-            },
+    # The command applies one PSF to all its sources, so it runs once per PSF
+    # file. That costs nothing extra: it already gives each source its own
+    # n_threads queue. A channel selected twice with the same PSF is
+    # deconvolved once.
+    pairs = list(zip(channels, channel_psfs))
+    deconvolved_of = {}
+    for psf_file in dict.fromkeys(channel_psfs):
+        group = list(dict.fromkeys(c for c, f in pairs if f == psf_file))
+        sources_out = (
+            _run_command(
+                cs, SourcesDeconvolveCommand,
+                {
+                    "sources": _sac_array(image_sources[c] for c in group),
+                    "psf": psf_source_of[psf_file],
+                    "output_pixel_type": params.output_pixel_type,
+                    "suffix": "_deconvolved",
+                    "block_size_x": params.block_size_x,
+                    "block_size_y": params.block_size_y,
+                    "block_size_z": params.block_size_z,
+                    "overlap_size": params.overlap_size,
+                    "num_iterations": params.num_iterations,
+                    "non_circulant": params.non_circulant,
+                    "regularization_factor": Float(float(params.regularization_factor)),
+                    "n_threads": params.n_threads,
+                },
+            )
+            .getOutput("sources_out")
         )
-        .getOutput("sources_out")
-    )
+        if sources_out is None:
+            # The command rejects an unusable PSF by printing why and
+            # returning without output, not by failing.
+            raise RuntimeError(
+                f"Deconvolution could not be set up with PSF '{psf_file}' "
+                f"(see the message above)."
+            )
+        deconvolved_of.update(
+            {(c, psf_file): s for c, s in zip(group, sources_out)})
+    deconvolved = [deconvolved_of[p] for p in pairs]
 
     print(f"Deconvolution set up for {len(deconvolved)} channel(s) "
           f"(computed lazily on export)")
@@ -492,7 +596,7 @@ def run(params: DeconvolveParams, ij=None):
     # ---- 4. Optionally show the deconvolved sources in a second BDV --------
     if params.show_in_bdv:
         bdv_dec = SourceServices.getBdvDisplayService().getNewBdv()
-        SourceServices.getBdvDisplayService().show(bdv_dec, deconvolved)
+        SourceServices.getBdvDisplayService().show(bdv_dec, _sac_array(deconvolved))
 
     # ---- 5. Optionally export the deconvolved sources to OME-TIFF ----------
     result_path = None
@@ -500,8 +604,8 @@ def run(params: DeconvolveParams, ij=None):
         _run_command(
             cs, KheopsExportSourcesCommand,
             {
-                "sources": deconvolved,
-                "range_channels": params.range_channels,
+                "sources": _sac_array(deconvolved),
+                "range_channels": "",  # already selected, see 1b
                 "range_slices": params.range_slices,
                 "range_frames": params.range_frames,
                 "file": output_file,
@@ -525,9 +629,9 @@ def run(params: DeconvolveParams, ij=None):
 
     # ---- 6. Sources cleanup ------------------------------------------------
     if not params.show_in_bdv:
-        source_service.remove(_sac_array(deconvolved))
+        source_service.remove(_sac_array(deconvolved_of.values()))
         # every series, not just the selected one
         source_service.remove(_sac_array(all_image_sources))
-        source_service.remove(_sac_array(psf_sources))
+        source_service.remove(_sac_array(opened_psf_sources))
 
     return result_path

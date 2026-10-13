@@ -27,7 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # I/O
     p.add_argument("--image", required=True, help="Multi-channel image to deconvolve")
-    p.add_argument("--psf", required=True, help="Single-channel PSF image")
+    p.add_argument("--psf", required=True, nargs="+",
+                   help="Single-channel PSF image, used for every channel; "
+                        "or several, one per exported channel in export "
+                        "order (after --range-channels), e.g. "
+                        "'--psf psf_488.tif psf_561.tif'")
     p.add_argument("--out", dest="output_folder", required=True,
                    help="Output folder for <image>.ome.tiff")
     p.add_argument("--overwrite", action="store_true",
@@ -106,7 +110,7 @@ def _main(argv=None) -> int:
 
     params = DeconvolveParams(
         image_file=args.image,
-        psf_file=args.psf,
+        psf_file=args.psf[0] if len(args.psf) == 1 else args.psf,
         output_folder=args.output_folder,
         unit=args.unit,
         output_pixel_type=args.output_pixel_type,

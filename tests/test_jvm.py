@@ -13,6 +13,7 @@ from bdvpg_deconvolution.pipeline import (
     DeconvolveParams,
     _jclass,
     _run_command,
+    _select_channels,
     _source_service,
     describe_series,
     run,
@@ -83,6 +84,90 @@ def test_ome_tif_input_names_output_without_double_ome(ij, data, tmp_path):
     with pytest.raises(FileExistsError, match=r"cells\.ome\.tiff"):
         run(DeconvolveParams(image_file=str(image), psf_file=str(data["psf"]),
                              output_folder=str(out)), ij=ij)
+
+
+# --- One PSF per channel -----------------------------------------------------
+
+@pytest.mark.parametrize("expression, n, expected", [
+    ("", 3, [0, 1, 2]),
+    ("1", 3, [1]),
+    ("2,0", 3, [2, 0]),
+    ("0:-1", 2, [0, 1]),
+    ("0:2:4", 5, [0, 2, 4]),
+])
+def test_select_channels(ij, expression, n, expected):
+    assert _select_channels(expression, n) == expected
+
+
+@pytest.mark.parametrize("expression", ["2", "0:5", "a", "0:2:end"])
+def test_select_channels_refuses(ij, expression):
+    with pytest.raises(ValueError, match="does not apply to 2 channel"):
+        _select_channels(expression, 2)
+
+
+def two_psfs(data):
+    return [str(data["psf"]), str(data["psf_narrow"])]
+
+
+@pytest.mark.parametrize("range_channels, exported", [("0", 1), ("0,1,0", 3)])
+def test_psf_count_must_match_exported_channels(ij, data, tmp_path, capsys,
+                                                range_channels, exported):
+    p = params(data, tmp_path, range_channels=range_channels)
+    p.psf_file = two_psfs(data)
+    with pytest.raises(ValueError, match=fr"'single.tif' exports {exported} "
+                                         r"channel\(s\).*2 PSF files"):
+        run(p, ij=ij)
+    # A single-series file has nothing else to warn about.
+    assert "WARNING" not in capsys.readouterr().err
+
+
+def test_single_psf_needs_no_count(ij, data, tmp_path):
+    # Refusing to overwrite is the first step after the channels are paired.
+    (tmp_path / "single.ome.tiff").write_bytes(b"previous result")
+    with pytest.raises(FileExistsError):
+        run(params(data, tmp_path, range_channels="1,0,1"), ij=ij)
+
+
+def test_misfit_series_are_listed_before_the_choice(ij, data, tmp_path, capsys):
+    p = params(data, tmp_path, image="multi")
+    p.psf_file = two_psfs(data)
+    with pytest.raises(ValueError, match="contains 2 series"):
+        run(p, ij=ij)
+    warning = capsys.readouterr().err
+    assert "WARNING: 2 PSF files" in warning
+    assert "1 of the 2 series of 'multi.tif' do not fit" in warning
+    assert "0  First pos  (1 channel(s) exported)" in warning
+    assert "Second pos" not in warning
+
+
+def test_misfit_series_is_refused(ij, data, tmp_path, capsys):
+    p = params(data, tmp_path, image="multi", series=0)
+    p.psf_file = two_psfs(data)
+    with pytest.raises(ValueError, match=r"Series 0 'First pos' of 'multi.tif' "
+                                         r"exports 1 channel\(s\) \[0\]"):
+        run(p, ij=ij)
+    assert "First pos" in capsys.readouterr().err
+
+
+def test_range_that_does_not_apply_is_listed(ij, data, tmp_path, capsys):
+    # Channel 1 exists in series 1 only.
+    p = params(data, tmp_path, image="multi", series=0, range_channels="1,0")
+    p.psf_file = two_psfs(data)
+    with pytest.raises(ValueError, match="does not apply to 1 channel"):
+        run(p, ij=ij)
+    assert "First pos  (range_channels='1,0' does not apply" in capsys.readouterr().err
+
+
+def test_fitting_series_proceeds_after_the_warning(ij, data, tmp_path, capsys):
+    p = params(data, tmp_path, image="multi", series=1)
+    p.psf_file = two_psfs(data)
+    (tmp_path / "multi_Second_pos.ome.tiff").write_bytes(b"previous result")
+    with pytest.raises(FileExistsError):
+        run(p, ij=ij)
+    out = capsys.readouterr()
+    assert "First pos" in out.err
+    assert "channel 0 <- PSF 'psf.tif'" in out.out
+    assert "channel 1 <- PSF 'psf_narrow.tif'" in out.out
 
 
 @pytest.mark.parametrize("kwargs, message", [

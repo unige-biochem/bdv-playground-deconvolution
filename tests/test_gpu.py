@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from conftest import POINTS, read_ome
 
@@ -21,9 +22,10 @@ FAST = dict(block_size_x=32, block_size_y=32, block_size_z=16, overlap_size=4,
             num_iterations=20, n_threads=2)
 
 
-def deconvolve(data, tmp_path, image="single", **kwargs):
+def deconvolve(data, tmp_path, image="single", psf=("psf",), **kwargs):
+    psf_file = [str(data[p]) for p in psf]
     return run(DeconvolveParams(image_file=str(data[image]),
-                                psf_file=str(data["psf"]),
+                                psf_file=psf_file[0] if len(psf) == 1 else psf_file,
                                 output_folder=str(tmp_path), **FAST, **kwargs))
 
 
@@ -64,3 +66,58 @@ def test_multi_series_subrange(gpu_devices, data, tmp_path, naming, suffix):
     # Series 1 is 2 x 12 x 48 x 40 (CZYX): one channel and 4 slices kept.
     assert axes == "ZYX"
     assert result.shape == (4, 48, 40)
+
+
+# --- One PSF per channel -----------------------------------------------------
+# Which PSF a channel got is checked by comparing it with a deconvolution by
+# that PSF alone, which needs reproducible results. Non-circulant mode does not
+# give them: clij2-fft pads each tile into an uncleared GPU buffer, so a
+# result depends on what earlier tiles left in GPU memory. Circulant mode pads
+# by mirroring, which writes every voxel, and is reproducible bit for bit.
+EXACT = dict(non_circulant=False)
+
+
+@pytest.fixture(scope="module")
+def reference(gpu_devices, data, tmp_path_factory):
+    """Both channels of each image, deconvolved with each PSF alone."""
+    ref = {}
+    for psf in ("psf", "psf_narrow"):
+        for image, kwargs in [("single", {}), ("multi", {"series": 1})]:
+            out = deconvolve(data, tmp_path_factory.mktemp(psf), image=image,
+                             psf=(psf,), **kwargs, **EXACT)
+            ref[image, psf] = read_ome(out)[1]
+    return ref
+
+
+def test_the_two_psfs_give_different_results(reference):
+    # Otherwise the tests below could not tell which PSF a channel got.
+    assert not np.array_equal(reference["single", "psf"],
+                              reference["single", "psf_narrow"])
+
+
+def test_one_psf_per_channel(reference, data, tmp_path):
+    _, result = read_ome(deconvolve(data, tmp_path, psf=("psf", "psf_narrow"), **EXACT))
+    np.testing.assert_array_equal(result[0], reference["single", "psf"][0])
+    np.testing.assert_array_equal(result[1], reference["single", "psf_narrow"][1])
+
+
+def test_psfs_follow_the_channel_selection(reference, data, tmp_path):
+    # Exported channel 0 is image channel 1, so it gets the first PSF.
+    _, result = read_ome(deconvolve(data, tmp_path, psf=("psf_narrow", "psf"),
+                                    range_channels="1,0", **EXACT))
+    np.testing.assert_array_equal(result[0], reference["single", "psf_narrow"][1])
+    np.testing.assert_array_equal(result[1], reference["single", "psf"][0])
+
+
+def test_psf_per_channel_on_a_series_slice(reference, data, tmp_path):
+    out = deconvolve(data, tmp_path, image="multi", series=1,
+                     psf=("psf_narrow", "psf"), range_channels="1,0",
+                     range_slices="0:3", **EXACT)
+
+    assert Path(out) == tmp_path / "multi_Second_pos.ome.tiff"
+    axes, result = read_ome(out)
+    # Series 1 is 2 x 12 x 48 x 40 (CZYX): both channels, swapped, 4 slices.
+    assert axes == "CZYX"
+    assert result.shape == (2, 4, 48, 40)
+    np.testing.assert_array_equal(result[0], reference["multi", "psf_narrow"][1, :4])
+    np.testing.assert_array_equal(result[1], reference["multi", "psf"][0, :4])

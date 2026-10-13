@@ -11,6 +11,7 @@ CLASSES = [
     "ch.epfl.biop.bdv.img.bioformats.command.DatasetFromBioFormatsCreateCommand",
     "ch.epfl.biop.command.process.deconvolve.SourcesDeconvolveCommand",
     "ch.epfl.biop.kheops.command.KheopsExportSourcesCommand",
+    "ch.epfl.biop.kheops.IntRangeParser",
     "sc.fiji.bdvpg.scijava.service.SourceService",
     "sc.fiji.bdvpg.service.SourceServices",
     "sc.fiji.bdvpg.scijava.service.tree.SourceTree",

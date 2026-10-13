@@ -93,14 +93,19 @@ def _write_ome(path, series):
 
 @pytest.fixture(scope="session")
 def data(tmp_path_factory):
-    """PSF, a 2-channel single-series image, and a 2-series image."""
+    """Two PSFs, a 2-channel single-series image, and a 2-series image.
+
+    The image is blurred with ``psf``; ``psf_narrow`` is a second, narrower
+    one, different enough to tell from the result which PSF a channel got.
+    """
     import tifffile
 
     root = tmp_path_factory.mktemp("data")
     psf = _gaussian((9, 15, 15), (1.5, 1.5, 1.5))
-    tifffile.imwrite(root / "psf.tif", psf.astype(np.float32)[np.newaxis],
-                     ome=True, photometric="minisblack",
-                     metadata={"axes": "CZYX", **CALIBRATION})
+    for name, kernel in [("psf", psf), ("psf_narrow", _gaussian((9, 15, 15), (0.7, 0.7, 0.7)))]:
+        tifffile.imwrite(root / f"{name}.tif", kernel.astype(np.float32)[np.newaxis],
+                         ome=True, photometric="minisblack",
+                         metadata={"axes": "CZYX", **CALIBRATION})
 
     points = np.zeros((2, 16, 64, 64))
     for p in POINTS:
@@ -112,7 +117,8 @@ def data(tmp_path_factory):
     # Series 1 has its own shape, so a test can tell which one was processed.
     _write_ome(root / "multi.tif", [("First pos", image[:1]),
                                     ("Second pos", image[:, :12, :48, :40])])
-    return {"root": root, "psf": root / "psf.tif", "image": image,
+    return {"root": root, "psf": root / "psf.tif",
+            "psf_narrow": root / "psf_narrow.tif", "image": image,
             "single": root / "single.tif", "multi": root / "multi.tif"}
 
 

@@ -177,6 +177,26 @@ def test_cli_maps_every_option(fake_pipeline):
     assert fake_pipeline["init"] == {"mode": "interactive", "max_heap": "8g"}
 
 
+def test_cli_passes_several_psfs_as_a_list(fake_pipeline):
+    argv = ["--image", "img.tif", "--psf", "a.tif", "b.tif", "--out", "out"]
+    assert cli._main(argv) == 0
+    assert fake_pipeline["params"].psf_file == ["a.tif", "b.tif"]
+
+
+@pytest.mark.parametrize("psf_file, names", [
+    ("psf.tif", ["psf.tif"]),
+    (["psf.tif"], ["psf.tif"]),
+    (("a.tif", "b.tif"), ["a.tif", "b.tif"]),
+])
+def test_psf_files(psf_file, names):
+    assert [p.name for p in pipeline._psf_files(psf_file)] == names
+
+
+def test_psf_files_refuses_empty_list():
+    with pytest.raises(ValueError, match="No PSF file"):
+        pipeline._psf_files([])
+
+
 def test_cli_reports_pipeline_errors(monkeypatch, fake_pipeline, capsys):
     def failing_run(params, ij=None):
         raise ValueError("boom")
