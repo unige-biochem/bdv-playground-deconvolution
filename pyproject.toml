@@ -52,8 +52,17 @@ packages = ["bdvpg_deconvolution"]
 
 [dependency-groups]
 dev = [
+    "imagecodecs>=2025.3.30",
     "pytest>=9.1.1",
+    "tifffile>=2025.5.10",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The JVM raises and handles access violations on purpose; pytest's
+# faulthandler would dump a stack for each one on Windows.
+addopts = ["--strict-markers", "-p", "no:faulthandler"]
+markers = [
+    "jvm: starts a JVM; the first run downloads Java 21 and the Maven tree",
+    "gpu: runs a real deconvolution; skipped without an OpenCL device",
+]

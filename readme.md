@@ -369,14 +369,14 @@ in use.
 
 ## Status
 
-The pipeline is a faithful transcription of a production Fiji/Groovy workflow,
-and the interop layer is verified (`bdvpg-smoke-test` passes: JVM boots, all Java
-classes, the `SourceService` tree and the GPU enumeration resolve). A full GPU
-run has **not** been exercised end-to-end here — validate against a known
-dataset first.
+The pipeline is a faithful transcription of a production Fiji/Groovy workflow.
+The [test suite](#tests) runs it end-to-end on the GPU, on small synthetic
+OME-TIFFs (single- and multi-series): output shape, pixel type, file naming,
+sub-ranges and that blurred points get sharper. It has **not** been validated
+against real data with a measured PSF — check against a known dataset first.
 
-The multi-series selection has not been exercised against a real multi-series
-file either: if the source tree layout is not the expected
+Multi-series selection is tested on a synthetic OME-TIFF only, not on real
+multi-series CZI/LIF files: if their source tree layout is not the expected
 `dataset > ImageName > series`, the code falls back to treating the file as a
 single series, which would look like a file with one image.
 
@@ -399,6 +399,28 @@ uv run bdvpg-smoke-test      # verify the Java interop
 > `uv run` uses the project's own `.venv` and **ignores an activated conda
 > environment**. Either use `uv run` from the clone, or `pip install` into your
 > conda env and call the commands directly — don't mix the two.
+
+### Tests
+
+```bash
+uv run pytest                  # everything: unit, JVM and GPU tests (~10 s warm)
+uv run pytest -m "not jvm"     # unit tests only: no JVM, no GPU, under a second
+```
+
+- **Unit tests** (`tests/test_unit.py`) cover the Python side: series file
+  naming, GPU pool specs, the CLI-to-parameters mapping and the JVM pin.
+- **`jvm` tests** (`tests/test_jvm.py`) start the real Java stack. They check the
+  pinned Java, that every Java class resolves, and the validation paths of
+  `run()` (series selection, existing output, ...), all stopping before the
+  deconvolution. The first run downloads Java and the Maven tree.
+- **`gpu` tests** (`tests/test_gpu.py`) run real deconvolutions and exports on
+  synthetic images, and are skipped when no OpenCL device is found. They use
+  the configured GPU pool and never change it.
+
+The `jvm` and `gpu` tests cannot run on GitHub's hosted runners (no GPU, and a
+heavy first download), so run them locally before a release — in particular
+after bumping `DEFAULT_ENDPOINTS`: a command parameter renamed on the Java side
+makes the GPU tests fail.
 
 ## Credits
 
