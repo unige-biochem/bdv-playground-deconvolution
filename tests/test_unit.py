@@ -10,8 +10,16 @@ from bdvpg_deconvolution.pipeline import (
     DeconvolveParams,
     _base_name,
     _format_series_listing,
+    _clipping_warning,
     _sanitize_filename,
 )
+
+
+def test_clipping_warning_names_channel_type_limit_and_issue():
+    msg = _clipping_warning(2, "UnsignedShortType", 65535.0)
+    assert msg.startswith("WARNING: channel 2 ")
+    assert "UnsignedShortType" in msg and "65535" in msg
+    assert pipeline.CLIPPING_ISSUE in msg
 
 
 # --- Series naming -----------------------------------------------------------

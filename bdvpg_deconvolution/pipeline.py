@@ -319,6 +319,32 @@ def _warn_psf_misfit(image_file, series, range_channels: str, n_psfs: int):
     )
 
 
+#: clij2-fft computes each tile into a buffer of the input's pixel type.
+CLIPPING_ISSUE = "https://github.com/unige-biochem/bdv-playground-deconvolution/issues/1"
+
+
+def _clipping_warning(channel: int, type_name: str, max_value: float) -> str:
+    """The warning for a channel whose integer pixel type clips the deconvolved values."""
+    return (
+        f"WARNING: channel {channel} has an integer pixel type ({type_name}): "
+        f"the deconvolved values are clamped to {max_value:g} and rounded to "
+        f"integers, even with Float output. Bright structures may saturate. "
+        f"See {CLIPPING_ISSUE}"
+    )
+
+
+def _warn_integer_inputs(image_sources, channels) -> None:
+    """Warn once per selected channel whose pixel type is an integer type."""
+    IntegerType = _jclass("net.imglib2.type.numeric.IntegerType")
+    for c in dict.fromkeys(channels):
+        t = image_sources[c].getSpimSource().getType()
+        if isinstance(t, IntegerType):
+            sys.stdout.flush()
+            print(_clipping_warning(c, str(t.getClass().getSimpleName()),
+                                    float(t.getMaxValue())),
+                  file=sys.stderr, flush=True)
+
+
 def _format_series_listing(image_file, series) -> str:
     width = max(len(name) for _, name, _ in series)
     lines = [f"  {i}  {name:<{width}}  ({n} channel{'s' if n != 1 else ''})"
@@ -506,6 +532,7 @@ def run(params: DeconvolveParams, ij=None):
             f"exported channel, in export order, or a single PSF for all."
         )
     channel_psfs = psf_files if per_channel_psf else psf_files * len(channels)
+    _warn_integer_inputs(image_sources, channels)
 
     # ---- 1c. Open the PSFs -------------------------------------------------
     # A multi-series PSF is unusual; as before, the first source is used.
